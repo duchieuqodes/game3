@@ -3949,7 +3949,7 @@ const TASKS_PER_PAGE = 10;
 const MISSION_IMAGE_URL = 'https://iili.io/2zUT8iX.png';
 
 // Modified View Tasks Command
-bot.onText(/Nhiệm Vụ|\/tasks/, async (msg) => {
+bot.onText(/Nhiệm vụ|\/tasks/, async (msg) => {
   const userId = msg.from.id;
   const chatId = msg.chat.id;
 
