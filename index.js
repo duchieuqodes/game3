@@ -2268,8 +2268,10 @@ function formatNumber(num) {
 
 
 
-
-
+// Hàm để thoát các ký tự đặc biệt cho Markdown
+function escapeMarkdown(text) {
+  return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, "\\$1");
+}
 
 // Hàm hiển thị menu chính với ảnh và caption
 async function showMainMenu(chatId, userId) {
@@ -2279,23 +2281,30 @@ async function showMainMenu(chatId, userId) {
       return bot.sendMessage(chatId, '❌ Không tìm thấy tài khoản, vui lòng /start để tạo tài khoản mới.');
     }
 
-    // Chuẩn bị nội dung menu với các thông tin cập nhật
+    // Thoát ký tự đặc biệt cho các trường có thể chứa ký tự đặc biệt
+    const username = escapeMarkdown(account.username || 'Không có tên');
+    const gold = account.gold.toLocaleString();
+    const vndc = account.vndc.toLocaleString();
+    const vnd = account.vnd.toLocaleString();
+    const islandRank = escapeMarkdown(getRankInfo(account.level, account.subLevel));
+
+    // Chuẩn bị nội dung menu
     const menuMessage = 
       '🏝️ *ISLOOTY VƯƠNG QUỐC HIẾU GÀ - XỨ SỞ TÀI PHÚ*\n' +
       '━━━━━━━━━━━━━━━━━━━━\n' +
-      `👤 *Người chơi*: ${account.username || 'Không có tên'}\n` +
-      `💰 *Vàng*: ${account.gold.toLocaleString()}\n` +
-      `💎 *VNDC*: ${account.vndc.toLocaleString()} VNDC\n` +
-      `💵 *VNĐ*: ${account.vnd.toLocaleString()} VNĐ\n` +
-      `🏆 *Cấp độ đảo*: ${getRankInfo(account.level, account.subLevel)}\n` +
+      `👤 *Người chơi*: ${username}\n` +
+      `💰 *Vàng*: ${gold}\n` +
+      `💎 *VNDC*: ${vndc} VNDC\n` +
+      `💵 *VNĐ*: ${vnd} VNĐ\n` +
+      `🏆 *Cấp độ đảo*: ${islandRank}\n` +
       '━━━━━━━━━━━━━━━━━━━━\n' +
-      '_Chọn một hành động bên dưới để tiếp tục cuộc phiêu lưu của bạn để có thể kiếm tiền từ trò chơi';
+      '_Chọn một hành động bên dưới để tiếp tục cuộc phiêu lưu của bạn để có thể kiếm tiền từ trò chơi!_';
 
-    // Tạo bàn phím chính với các hành động (emoji ở cuối mỗi tùy chọn)
+    // Tạo bàn phím chính với các hành động
     const mainMenuKeyboard = {
       keyboard: [
         [{ text: 'Xem tài khoản 🏝️' }],
-        [{ text: 'Vòng Quay 🎰' }, { text: 'Đào VNDC ⛏️' }],
+        [{ text: 'Vòng quay 🎰' }, { text: 'Đào VNDC ⛏️' }],
         [{ text: 'Nâng Cấp Hòn Đảo 🚀' }],
         [{ text: 'Điểm Danh Hàng Ngày 🏴‍☠️' }, { text: 'Cửa Hàng 🏪' }],
         [{ text: 'Nạp tiền 💵' }, { text: 'Rút tiền 💸' }],
@@ -2316,6 +2325,10 @@ async function showMainMenu(chatId, userId) {
     return bot.sendMessage(chatId, '❌ Có lỗi xảy ra, vui lòng thử lại sau.');
   }
 }
+
+
+
+
 
 
 // Modify the start command to use the main menu function
