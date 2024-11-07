@@ -1881,7 +1881,7 @@ async function calculateMinedVNDC(account) {
 }
 
 // Mining command handler
-bot.onText(/Đào vndc|\/mining/, async (msg) => {
+bot.onText(/Đào VNDC|\/mining/, async (msg) => {
   try {
     const account = await Account.findOne({ userId: msg.from.id });
     if (!account) {
@@ -2295,9 +2295,9 @@ async function showMainMenu(chatId, userId) {
     const mainMenuKeyboard = {
       keyboard: [
         [{ text: 'Xem tài khoản 🏝️' }],
-        [{ text: 'Quay Thưởng 🎰' }, { text: 'Đào VNDC ⛏️' }],
+        [{ text: 'Vòng Quay 🎰' }, { text: 'Đào VNDC ⛏️' }],
         [{ text: 'Nâng Cấp Hòn Đảo 🚀' }],
-        [{ text: 'Đi Cướp Biển 🏴‍☠️' }, { text: 'Cửa Hàng 🏪' }],
+        [{ text: 'Điểm Danh Hàng Ngày 🏴‍☠️' }, { text: 'Cửa Hàng 🏪' }],
         [{ text: 'Nạp tiền 💵' }, { text: 'Rút tiền 💸' }],
         [{ text: 'Mời bạn bè 📨' }, { text: 'Nhiệm vụ 🎯' }]
       ],
