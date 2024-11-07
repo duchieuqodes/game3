@@ -2281,7 +2281,7 @@ async function showMainMenu(chatId, userId) {
 
     // Chuẩn bị nội dung menu với các thông tin cập nhật
     const menuMessage = 
-      '🏝️ *Menu Chính - Đảo Kho Báu*\n' +
+      '🏝️ *ISLOOTY VƯƠNG QUỐC HIẾU GÀ - XỨ SỞ TÀI PHÚ*\n' +
       '━━━━━━━━━━━━━━━━━━━━\n' +
       `👤 *Người chơi*: ${account.username || 'Không có tên'}\n` +
       `💰 *Vàng*: ${account.gold.toLocaleString()}\n` +
@@ -2289,7 +2289,7 @@ async function showMainMenu(chatId, userId) {
       `💵 *VNĐ*: ${account.vnd.toLocaleString()} VNĐ\n` +
       `🏆 *Cấp độ đảo*: ${getRankInfo(account.level, account.subLevel)}\n` +
       '━━━━━━━━━━━━━━━━━━━━\n' +
-      '_Chọn một hành động bên dưới để tiếp tục cuộc phiêu lưu của bạn!_';
+      '_Chọn một hành động bên dưới để tiếp tục cuộc phiêu lưu của bạn để có thể kiếm tiền từ trò chơi';
 
     // Tạo bàn phím chính với các hành động (emoji ở cuối mỗi tùy chọn)
     const mainMenuKeyboard = {
