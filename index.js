@@ -1015,27 +1015,21 @@ bot.on('callback_query', async (callbackQuery) => {
   }
 });
 
+
 // Xử lý nút quay về
 bot.on('callback_query', async (callbackQuery) => {
   if (callbackQuery.data === 'return_main') {
     // Xóa tin nhắn hiện tại
     await bot.deleteMessage(callbackQuery.message.chat.id, callbackQuery.message.message_id);
 
-    // Gửi menu chính
-    const mainKeyboard = {
-      keyboard: [
-        ['🎰 Quay', '💰 Số dư'],
-        ['📦 Hộp quà', '⚔️ Đi cướp biển'],
-        ['🏝️ Đảo của tôi', '📊 Bảng xếp hạng']
-      ],
-      resize_keyboard: true
-    };
+    // Gọi hàm showMainMenu để gửi menu chính
+    const chatId = callbackQuery.message.chat.id;
+    const userId = callbackQuery.from.id;
 
-    bot.sendMessage(callbackQuery.message.chat.id, '📜 Menu chính:', {
-      reply_markup: mainKeyboard
-    });
+    await showMainMenu(chatId, userId);
   }
 });
+
 
 
 
@@ -2277,7 +2271,7 @@ function formatNumber(num) {
 
 
 
-// Add this function for the main menu
+// Hàm hiển thị menu chính với ảnh và caption
 async function showMainMenu(chatId, userId) {
   try {
     const account = await Account.findOne({ userId });
@@ -2285,38 +2279,44 @@ async function showMainMenu(chatId, userId) {
       return bot.sendMessage(chatId, '❌ Không tìm thấy tài khoản, vui lòng /start để tạo tài khoản mới.');
     }
 
-    // Calculate time until next spin reward
-    const minutesUntilNextReward = getTimeUntilNextReward(account.lastSpinRewardTime);
-
+    // Chuẩn bị nội dung menu với các thông tin cập nhật
     const menuMessage = 
-      '🎮 Menu Chính - Đảo Kho Báu\n\n' +
-      `👤 Người chơi: ${account.username || 'Không có tên'}\n` +
-      `💰 Vàng: ${account.gold.toLocaleString()}\n` +
-      `🎫 Lượt quay: ${account.spinCount}\n` +
-      `⚔️ Lượt cướp đảo: ${account.robberyCount}\n` +
-      `🎁 Hộp quà: ${account.giftBoxCount}/${giftBoxMilestones[account.currentGiftBoxMilestone]?.max || 'Max'}\n` +
-      `👑 Cấp độ: ${account.level}\n` +
-      `⭐ Kinh nghiệm: ${account.exp}\n` +
-      `⏳ Nhận thêm 5 lượt quay sau: ${minutesUntilNextReward} phút`;
+      '🏝️ *Menu Chính - Đảo Kho Báu*\n' +
+      '━━━━━━━━━━━━━━━━━━━━\n' +
+      `👤 *Người chơi*: ${account.username || 'Không có tên'}\n` +
+      `💰 *Vàng*: ${account.gold.toLocaleString()}\n` +
+      `💎 *VNDC*: ${account.vndc.toLocaleString()} VNDC\n` +
+      `💵 *VNĐ*: ${account.vnd.toLocaleString()} VNĐ\n` +
+      `🏆 *Cấp độ đảo*: ${getRankInfo(account.level, account.subLevel)}\n` +
+      '━━━━━━━━━━━━━━━━━━━━\n' +
+      '_Chọn một hành động bên dưới để tiếp tục cuộc phiêu lưu của bạn!_';
 
+    // Tạo bàn phím chính với các hành động (emoji ở cuối mỗi tùy chọn)
     const mainMenuKeyboard = {
       keyboard: [
-        [{ text: 'Xem tài khoản🏝️' }],
-        [{ text: 'Quay Thưởng 🎰' }, { text: 'Đào vndc' }],
+        [{ text: 'Xem tài khoản 🏝️' }],
+        [{ text: 'Quay Thưởng 🎰' }, { text: 'Đào VNDC ⛏️' }],
         [{ text: 'Nâng Cấp Hòn Đảo 🚀' }],
-        [{ text: 'Đi Cướp Biển' }, { text: 'Cửa Hàng 🏪' }],
-        [{ text: 'Nạp tiền' }, { text: 'Rút tiền' }],
-        [{ text: 'Mời bạn bè' }, { text: 'Nhiệm vụ' }]
+        [{ text: 'Đi Cướp Biển 🏴‍☠️' }, { text: 'Cửa Hàng 🏪' }],
+        [{ text: 'Nạp tiền 💵' }, { text: 'Rút tiền 💸' }],
+        [{ text: 'Mời bạn bè 📨' }, { text: 'Nhiệm vụ 🎯' }]
       ],
       resize_keyboard: true
     };
 
-    return bot.sendMessage(chatId, menuMessage, { reply_markup: mainMenuKeyboard });
+    // Gửi ảnh kèm nội dung menu và bàn phím
+    await bot.sendPhoto(chatId, 'https://iili.io/2zbgDf2.png', {
+      caption: menuMessage,
+      parse_mode: 'Markdown',
+      reply_markup: mainMenuKeyboard
+    });
+
   } catch (error) {
     console.error('Error in showMainMenu:', error);
     return bot.sendMessage(chatId, '❌ Có lỗi xảy ra, vui lòng thử lại sau.');
   }
 }
+
 
 // Modify the start command to use the main menu function
 bot.onText(/\/start/, async (msg) => {
