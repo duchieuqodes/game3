@@ -4,6 +4,8 @@ const crc = require('crc'); // Cần cài đặt thư viện `crc`: npm install 
 const axios = require('axios');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
+const keep_alive = require('./keep_alive.js');
+
 
 
 
