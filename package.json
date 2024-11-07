@@ -21,9 +21,11 @@
     "qrcode": "^1.5.4",
     "uuid": "^11.0.2"
   },
+  
   "engines": {
-    "node": "14.x"
+    "node": ">=16"
   },
+
   "repository": {
     "type": "git",
     "url": "your-git-repo-url"
