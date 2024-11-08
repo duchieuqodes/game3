@@ -46,11 +46,11 @@ const accountSchema = new mongoose.Schema({
   currentIslandImageUrl: { type: String, default: 'default-island-url' },
 
   // điểm danh
-   dailyCheckin: {
-    lastCheckin: Date,
-    streak: Number,
-    totalCheckins: Number
-  },
+    dailyCheckin: {
+    lastCheckin: { type: Date, default: null },
+    streak: { type: Number, default: 0 },
+    totalCheckins: { type: Number, default: 0 }
+      },
 
   // Gift box system
   giftBoxCount: { type: Number, default: 0 },
@@ -4353,16 +4353,26 @@ const DAILY_REWARDS = [
 
 
 // Command handler
-bot.onText(/\/checkin|Điểm danh Hàng Ngày/, async (msg) => {
+bot.onText(/\/checkin|Điểm danh/, async (msg) => {
   try {
     const account = await Account.findOne({ userId: msg.from.id });
     if (!account) {
       return bot.sendMessage(msg.chat.id, '❌ Không tìm thấy tài khoản!');
     }
 
+    // Khởi tạo dailyCheckin nếu chưa có
+    if (!account.dailyCheckin) {
+      account.dailyCheckin = {
+        lastCheckin: null,
+        streak: 0,
+        totalCheckins: 0
+      };
+      await account.save();
+    }
+
     const mainText = generateCheckinText(account);
     
-    await bot.sendPhoto(msg.chat.id, 'https://iili.io/2IzPsIV.png', {
+    await bot.sendPhoto(msg.chat.id, 'https://iili.io/2IoaRsf.png', {
       caption: mainText,
       parse_mode: 'Markdown',
       reply_markup: {
@@ -4379,7 +4389,7 @@ bot.onText(/\/checkin|Điểm danh Hàng Ngày/, async (msg) => {
   }
 });
 
-// Callback handler
+// Callback query handler
 bot.on('callback_query', async (callbackQuery) => {
   try {
     const action = callbackQuery.data;
@@ -4391,40 +4401,50 @@ bot.on('callback_query', async (callbackQuery) => {
       if (!account) return;
 
       const now = new Date();
-      const lastCheckin = account.dailyCheckin?.lastCheckin;
       
-      // Check if already checked in today
-      if (lastCheckin && isSameDay(lastCheckin, now)) {
+      // Khởi tạo dailyCheckin nếu chưa có
+      if (!account.dailyCheckin) {
+        account.dailyCheckin = {
+          lastCheckin: null,
+          streak: 0,
+          totalCheckins: 0
+        };
+      }
+
+      // Kiểm tra đã điểm danh chưa
+      if (account.dailyCheckin.lastCheckin && isSameDay(account.dailyCheckin.lastCheckin, now)) {
         return bot.answerCallbackQuery(callbackQuery.id, {
           text: '❌ Bạn đã điểm danh hôm nay rồi!\nQuay lại vào ngày mai nhé!',
           show_alert: true
         });
       }
 
-      // Check if streak should reset
-      if (lastCheckin && !isConsecutiveDay(lastCheckin, now)) {
-        account.dailyCheckin.streak = 0;
+      // Kiểm tra và cập nhật streak
+      if (account.dailyCheckin.lastCheckin) {
+        if (!isConsecutiveDay(account.dailyCheckin.lastCheckin, now)) {
+          account.dailyCheckin.streak = 0;
+        }
       }
 
-      // Update streak and get rewards
-      account.dailyCheckin = account.dailyCheckin || {};
-      account.dailyCheckin.streak++;
+      // Cập nhật thông tin điểm danh
+      account.dailyCheckin.streak = Number(account.dailyCheckin.streak || 0) + 1;
       account.dailyCheckin.lastCheckin = now;
-      account.dailyCheckin.totalCheckins = (account.dailyCheckin.totalCheckins || 0) + 1;
+      account.dailyCheckin.totalCheckins = Number(account.dailyCheckin.totalCheckins || 0) + 1;
 
+      // Tìm phần thưởng phù hợp
       const reward = DAILY_REWARDS.find(r => r.day === account.dailyCheckin.streak) || 
-                    DAILY_REWARDS[DAILY_REWARDS.length - 1];
+                    DAILY_REWARDS[0];
 
-      // Apply rewards
-      account.gold += reward.gold;
-      account.spinCount += reward.spins;
+      // Cập nhật phần thưởng
+      account.gold = Number(account.gold || 0) + reward.gold;
+      account.spinCount = Number(account.spinCount || 0) + reward.spins;
       if (reward.vndc) {
-        account.vndc += reward.vndc;
+        account.vndc = Number(account.vndc || 0) + reward.vndc;
       }
 
       await account.save();
 
-      // Generate reward message
+      // Tạo thông báo phần thưởng
       let rewardMsg = `🎉 *ĐIỂM DANH THÀNH CÔNG*\n`;
       rewardMsg += `━━━━━━━━━━━━━━━━━━━━\n`;
       rewardMsg += `📅 Ngày điểm danh thứ: ${account.dailyCheckin.streak}\n\n`;
@@ -4433,10 +4453,6 @@ bot.on('callback_query', async (callbackQuery) => {
       rewardMsg += `└ 🎫 +${reward.spins} Lượt quay\n`;
       if (reward.vndc) {
         rewardMsg += `└ 💎 +${reward.vndc} VNDC\n`;
-      }
-      
-      if ([7, 14, 30].includes(account.dailyCheckin.streak)) {
-        rewardMsg += `\n🌟 CHÚC MỪNG! Bạn đã nhận được phần thưởng đặc biệt!`;
       }
 
       await bot.editMessageCaption(rewardMsg, {
@@ -4463,6 +4479,7 @@ bot.on('callback_query', async (callbackQuery) => {
           ]
         }
       });
+
     } else if (action === 'refresh_checkin') {
       const account = await Account.findOne({ userId });
       const mainText = generateCheckinText(account);
@@ -4482,19 +4499,23 @@ bot.on('callback_query', async (callbackQuery) => {
 
   } catch (error) {
     console.error('Error in callback query:', error);
+    bot.answerCallbackQuery(callbackQuery.id, {
+      text: '❌ Có lỗi xảy ra, vui lòng thử lại sau.',
+      show_alert: true
+    });
   }
 });
 
 // Helper functions
 function generateCheckinText(account) {
-  const streak = account.dailyCheckin?.streak || 0;
-  const totalCheckins = account.dailyCheckin?.totalCheckins || 0;
+  const streak = Number(account.dailyCheckin?.streak || 0);
+  const totalCheckins = Number(account.dailyCheckin?.totalCheckins || 0);
   const lastCheckin = account.dailyCheckin?.lastCheckin;
   
   let text = `
 📝 *HỆ THỐNG ĐIỂM DANH HÀNG NGÀY*
 ━━━━━━━━━━━━━━━━━━━━
-👤 Người chơi: \`${account.username}\`
+👤 Người chơi: \`${account.username || account.userId}\`
 
 📊 *Thống kê điểm danh:*
 └ 🔥 Chuỗi hiện tại: ${streak} ngày
@@ -4517,9 +4538,7 @@ function generateCheckinText(account) {
 function generateRewardsText() {
   let text = `
 📋 *BẢNG PHẦN THƯỞNG ĐIỂM DANH*
-━━━━━━━━━━━━━━━━━━━━
-
-`;
+━━━━━━━━━━━━━━━━━━━━\n`;
 
   DAILY_REWARDS.forEach(reward => {
     text += `*Ngày ${reward.day}:*\n`;
@@ -4535,13 +4554,21 @@ function generateRewardsText() {
 }
 
 function isSameDay(date1, date2) {
-  return date1.getFullYear() === date2.getFullYear() &&
-         date1.getMonth() === date2.getMonth() &&
-         date1.getDate() === date2.getDate();
+  if (!date1 || !date2) return false;
+  const d1 = new Date(date1);
+  const d2 = new Date(date2);
+  return d1.getFullYear() === d2.getFullYear() &&
+         d1.getMonth() === d2.getMonth() &&
+         d1.getDate() === d2.getDate();
 }
 
 function isConsecutiveDay(lastDate, currentDate) {
+  if (!lastDate || !currentDate) return false;
   const oneDayMs = 24 * 60 * 60 * 1000;
-  const diffDays = Math.round((currentDate - lastDate) / oneDayMs);
+  const lastDay = new Date(lastDate);
+  const currDay = new Date(currentDate);
+  lastDay.setHours(0, 0, 0, 0);
+  currDay.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((currDay - lastDay) / oneDayMs);
   return diffDays === 1;
 }
