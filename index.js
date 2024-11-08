@@ -3232,93 +3232,161 @@ async function handleWithdrawalRequest(msg, account) {
 }
 
 async function handleWithdrawalAmountInput(msg, account) {
-  const amount = parseInt(msg.text.replace(/,/g, ''));
-  if (isNaN(amount) || amount < MIN_WITHDRAWAL || amount > MAX_WITHDRAWAL) {
-    return bot.sendMessage(
-      msg.chat.id,
-      `❌ Số tiền không hợp lệ. Vui lòng nhập số từ ${formatNumber(MIN_WITHDRAWAL)} đến ${formatNumber(MAX_WITHDRAWAL)} VNDC.`
-    );
-  }
+  try {
+    // Delete user's message
+    await bot.deleteMessage(msg.chat.id, msg.message_id);
 
-  if (amount > account.vndc) {
-    return bot.sendMessage(
-      msg.chat.id,
-      '❌ Số dư không đủ để thực hiện giao dịch này.'
-    );
-  }
+    const amount = parseInt(msg.text.replace(/\D/g, ''));
 
-  account.userState.tempWithdrawalAmount = amount;
-  account.userState.currentState = STATES.CONFIRMING_WITHDRAWAL;
-  await account.save();
-
-  const confirmationMessage = getConfirmationMessage(account, amount);
-  await bot.editMessageCaption(
-    confirmationMessage.caption,
-    {
-      chat_id: msg.chat.id,
-      message_id: account.userState.lastMessageId,
-      ...confirmationMessage.options
+    // Validate amount format
+    if (isNaN(amount)) {
+      return bot.sendMessage(
+        msg.chat.id,
+        '❌ Vui lòng nhập số tiền hợp lệ.'
+      );
     }
-  );
+
+    // Validate amount range
+    if (amount < MIN_WITHDRAWAL || amount > MAX_WITHDRAWAL) {
+      return bot.sendMessage(
+        msg.chat.id,
+        `❌ Số tiền rút phải từ ${formatNumber(MIN_WITHDRAWAL)} đến ${formatNumber(MAX_WITHDRAWAL)} VNDC.`
+      );
+    }
+
+    // Validate account balance
+    if (amount > account.vndc) {
+      return bot.sendMessage(
+        msg.chat.id,
+        '❌ Số dư không đủ để thực hiện giao dịch.'
+      );
+    }
+
+    // Update user state
+    account.userState.currentState = STATES.CONFIRMING_WITHDRAWAL;
+    account.userState.tempWithdrawalAmount = amount;
+    await account.save();
+
+    // Delete previous message if exists
+    if (account.userState.lastMessageId) {
+      try {
+        await bot.deleteMessage(msg.chat.id, account.userState.lastMessageId);
+      } catch (error) {
+        console.log('Error deleting previous message:', error);
+      }
+    }
+
+    // Send confirmation message with image
+    const confirmationMessage = getConfirmationMessage(account, amount);
+    const sentMessage = await bot.sendPhoto(
+      msg.chat.id,
+      WITHDRAWAL_IMAGE_URL,
+      {
+        caption: confirmationMessage.caption,
+        ...confirmationMessage.options
+      }
+    );
+
+    // Update lastMessageId
+    account.userState.lastMessageId = sentMessage.message_id;
+    await account.save();
+
+  } catch (error) {
+    console.error('Error in withdrawal amount input:', error);
+    bot.sendMessage(msg.chat.id, '❌ Có lỗi xảy ra, vui lòng thử lại sau.');
+  }
 }
 
 async function handleWithdrawalConfirmation(msg, account, amount) {
   try {
-    // Process withdrawal
-    account.vndc -= amount;
-    const transactionId = uuidv4();
+    // Validate amount and account balance
+    if (amount < MIN_WITHDRAWAL || amount > MAX_WITHDRAWAL) {
+      return bot.sendMessage(
+        msg.chat.id,
+        `❌ Số tiền rút phải từ ${formatNumber(MIN_WITHDRAWAL)} đến ${formatNumber(MAX_WITHDRAWAL)} VNDC.`
+      );
+    }
+
+    if (amount > account.vndc) {
+      return bot.sendMessage(
+        msg.chat.id,
+        '❌ Số dư không đủ để thực hiện giao dịch.'
+      );
+    }
+
+    // Generate transaction ID
+    const transactionId = `W${Date.now()}${Math.random().toString(36).substr(2, 6)}`;
 
     // Create new withdrawal record
     const withdrawal = new Withdrawal({
-      amount: amount,
-      bankInfo: account.bankInfo,
-      transactionId: transactionId,
-      status: 'pending', 
-      userId: account.userId
+      transactionId,
+      userId: account.userId,
+      amount,
+      bankCode: account.bankInfo.bankCode,
+      accountNumber: account.bankInfo.accountNumber,
+      accountName: account.bankInfo.accountName,
+      status: 'pending',
+      createdAt: new Date()
     });
 
+    // Deduct amount from user's balance
+    account.vndc -= amount;
+    await account.save();
     await withdrawal.save();
 
-    // Update account state
-    account.withdrawalHistory.push(withdrawal._id);
-    account.userState.currentState = STATES.IDLE;
-    account.userState.tempWithdrawalAmount = 0;
-    await account.save();
-
-    // Send notification to admin group
-    const adminMessage = `🔔 *YÊU CẦU RÚT TIỀN MỚI*\n\n` +
-      `🆔 Mã GD: #${transactionId.slice(-6)}\n` +
-      `👤 User ID: ${account.userId}\n` +
-      `💎 Số tiền: ${formatNumber(amount)} VNDC\n` +
-      `🏦 Ngân hàng: ${BANK_LIST[account.bankInfo.bankCode].name}\n` +
-      `📝 Số TK: ${account.bankInfo.accountNumber}\n` +
-      `👤 Chủ TK: ${account.bankInfo.accountName}`;
-
-    await bot.sendMessage(ADMIN_GROUP_ID, adminMessage, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [{
-            text: '✅ Xác nhận',
-            callback_data: `admin_confirm:${transactionId}`
-          }, {
-            text: '❌ Từ chối',
-            callback_data: `admin_cancel:${transactionId}`
-          }]
-        ]
-      }
-    });
-
     // Send confirmation to user
-    await bot.editMessageText(
+    await bot.editMessageCaption(
       `✅ *YÊU CẦU RÚT TIỀN THÀNH CÔNG*\n\n` +
       `🆔 Mã GD: #${transactionId.slice(-6)}\n` +
-      `💎 Số tiền: ${formatNumber(amount)} VNDC\n\n` +
-      `⏳ Vui lòng chờ admin xử lý trong ít phút.`,
+      `💎 Số tiền: ${formatNumber(amount)} VNDC\n` +
+      `🏦 Ngân hàng: ${BANK_LIST[account.bankInfo.bankCode].name}\n` +
+      `👤 Chủ TK: ${account.bankInfo.accountName}\n` +
+      `📝 Số TK: ${account.bankInfo.accountNumber}\n\n` +
+      `⏳ Trạng thái: Đang xử lý\n` +
+      `ℹ️ Yêu cầu của bạn sẽ được xử lý trong thời gian sớm nhất.`,
       {
         chat_id: msg.chat.id,
         message_id: msg.message_id,
         parse_mode: 'Markdown'
+      }
+    );
+
+    // Reset user state
+    account.userState = {
+      currentState: STATES.IDLE,
+      bankCode: null,
+      tempWithdrawalAmount: 0,
+      lastMessageId: null
+    };
+    await account.save();
+
+    // Send notification to admin group
+    await bot.sendPhoto(
+      ADMIN_GROUP_ID,
+      WITHDRAWAL_IMAGE_URL,
+      {
+        caption: `🔔 *YÊU CẦU RÚT TIỀN MỚI*\n\n` +
+          `🆔 Mã GD: #${transactionId.slice(-6)}\n` +
+          `👤 User ID: ${account.userId}\n` +
+          `💎 Số tiền: ${formatNumber(amount)} VNDC\n` +
+          `🏦 Ngân hàng: ${BANK_LIST[account.bankInfo.bankCode].name}\n` +
+          `👤 Chủ TK: ${account.bankInfo.accountName}\n` +
+          `📝 Số TK: ${account.bankInfo.accountNumber}`,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: '✅ Xác nhận',
+                callback_data: `admin_confirm:${transactionId}`
+              },
+              {
+                text: '❌ Hủy',
+                callback_data: `admin_cancel:${transactionId}`
+              }
+            ]
+          ]
+        }
       }
     );
 
