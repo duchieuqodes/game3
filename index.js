@@ -4911,7 +4911,7 @@ function formatNumber(number) {
 
 
 // Command to show rankings
-bot.onText(/\Bảng xếp hạng/, async (msg) => {
+bot.onText(/Bảng xếp hạng/, async (msg) => {
   try {
     await sendRankingMenu(msg.chat.id);
   } catch (error) {
