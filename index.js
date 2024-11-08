@@ -4353,7 +4353,7 @@ const DAILY_REWARDS = [
 
 
 // Command handler
-bot.onText(/\/checkin|Điểm danh/, async (msg) => {
+bot.onText(/\/checkin|Điểm Danh Hàng Ngày/, async (msg) => {
   try {
     const account = await Account.findOne({ userId: msg.from.id });
     if (!account) {
@@ -4372,7 +4372,7 @@ bot.onText(/\/checkin|Điểm danh/, async (msg) => {
 
     const mainText = generateCheckinText(account);
     
-    await bot.sendPhoto(msg.chat.id, 'https://iili.io/2IoaRsf.png', {
+    await bot.sendPhoto(msg.chat.id, 'https://iili.io/2IzPsIV.png', {
       caption: mainText,
       parse_mode: 'Markdown',
       reply_markup: {
