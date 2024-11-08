@@ -3023,8 +3023,8 @@ bot.on('callback_query', async (callbackQuery) => {
         withdrawal.status = 'completed';
         await withdrawal.save();
 
-        await bot.editMessageText(
-          msg.text + '\n\n✅ Đã xử lý thành công',
+        await bot.editMessageCaption(
+          msg.caption + '\n\n✅ Đã xử lý thành công',
           {
             chat_id: ADMIN_GROUP_ID,
             message_id: msg.message_id,
@@ -3032,12 +3032,15 @@ bot.on('callback_query', async (callbackQuery) => {
           }
         );
 
-        await sendBotMessage(
+        await bot.sendPhoto(
           account.userId,
-          `✅ *GIAO DỊCH THÀNH CÔNG*\n\n` +
-          `🆔 Mã GD: #${transactionId.slice(-6)}\n` +
-          `💎 Số tiền: ${formatNumber(withdrawal.amount)} VNDC đã được rút thành công.`,
-          { parse_mode: 'Markdown' }
+          WITHDRAWAL_IMAGE_URL,
+          {
+            caption: `✅ *GIAO DỊCH THÀNH CÔNG*\n\n` +
+                    `🆔 Mã GD: #${transactionId.slice(-6)}\n` +
+                    `💎 Số tiền: ${formatNumber(withdrawal.amount)} VNDC đã được rút thành công.`,
+            parse_mode: 'Markdown'
+          }
         );
       } else {
         withdrawal.status = 'cancelled';
@@ -3045,8 +3048,8 @@ bot.on('callback_query', async (callbackQuery) => {
         await withdrawal.save();
         await account.save();
 
-        await bot.editMessageText(
-          msg.text + '\n\n❌ Đã hủy yêu cầu',
+        await bot.editMessageCaption(
+          msg.caption + '\n\n❌ Đã hủy yêu cầu',
           {
             chat_id: ADMIN_GROUP_ID,
             message_id: msg.message_id,
@@ -3054,12 +3057,15 @@ bot.on('callback_query', async (callbackQuery) => {
           }
         );
 
-        await sendBotMessage(
+        await bot.sendPhoto(
           account.userId,
-          `❌ *GIAO DỊCH BỊ HỦY*\n\n` +
-          `🆔 Mã GD: #${transactionId.slice(-6)}\n` +
-          `💎 Số tiền: ${formatNumber(withdrawal.amount)} VNDC đã được hoàn lại vào tài khoản.`,
-          { parse_mode: 'Markdown' }
+          WITHDRAWAL_IMAGE_URL,
+          {
+            caption: `❌ *GIAO DỊCH BỊ HỦY*\n\n` +
+                    `🆔 Mã GD: #${transactionId.slice(-6)}\n` +
+                    `💎 Số tiền: ${formatNumber(withdrawal.amount)} VNDC đã được hoàn lại vào tài khoản.`,
+            parse_mode: 'Markdown'
+          }
         );
       }
 
@@ -3074,21 +3080,24 @@ bot.on('callback_query', async (callbackQuery) => {
 
     switch (action) {
       case 'link_bank':
-        await cleanupMessages(msg.chat.id, msg.message_id);
         await handleBankLinking(msg, account);
         break;
 
       case 'bank_page':
-        await handleBankPagination(msg, account, value);
+        const keyboard = getBankKeyboard(parseInt(value));
+        await bot.editMessageCaption(msg.caption, {
+          chat_id: msg.chat.id,
+          message_id: msg.message_id,
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        });
         break;
 
       case 'bank_select':
-        await cleanupMessages(msg.chat.id, msg.message_id);
         await handleBankSelection(msg, account, value);
         break;
 
       case 'withdraw_money':
-        await cleanupMessages(msg.chat.id, msg.message_id);
         await handleWithdrawalRequest(msg, account);
         break;
 
@@ -3097,19 +3106,32 @@ bot.on('callback_query', async (callbackQuery) => {
         break;
 
       case 'cancel_withdrawal':
-        await cleanupMessages(msg.chat.id, msg.message_id);
         await handleWithdrawalCancellation(msg, account);
-        await showMainMenu(msg.chat.id, account);
+        const menuMessage = getWithdrawalMenuMessage(account);
+        await bot.editMessageCaption(menuMessage.caption, {
+          chat_id: msg.chat.id,
+          message_id: msg.message_id,
+          parse_mode: 'Markdown',
+          reply_markup: menuMessage.options.reply_markup
+        });
         break;
 
       case 'withdrawal_history':
-        await cleanupMessages(msg.chat.id, msg.message_id);
         await handleWithdrawalHistory(msg, account);
         break;
 
       case 'close_menu':
-        await cleanupMessages(msg.chat.id, null);
         await bot.deleteMessage(msg.chat.id, msg.message_id);
+        break;
+
+      case 'back_to_menu':
+        const withdrawalMenu = getWithdrawalMenuMessage(account);
+        await bot.editMessageCaption(withdrawalMenu.caption, {
+          chat_id: msg.chat.id,
+          message_id: msg.message_id,
+          parse_mode: 'Markdown',
+          reply_markup: withdrawalMenu.options.reply_markup
+        });
         break;
     }
 
@@ -3126,9 +3148,10 @@ async function handleBankLinking(msg, account) {
   account.userState.currentState = STATES.WAITING_ACCOUNT_NUMBER;
   await account.save();
 
-  await bot.editMessageText('🏦 Vui lòng chọn ngân hàng:', {
+  await bot.editMessageCaption('🏦 Vui lòng chọn ngân hàng:', {
     chat_id: msg.chat.id,
     message_id: msg.message_id,
+    parse_mode: 'Markdown',
     reply_markup: getBankKeyboard()
   });
 }
@@ -3146,12 +3169,13 @@ async function handleBankSelection(msg, account, bankCode) {
   await account.save();
 
   const bankName = BANK_LIST[bankCode].name;
-  await bot.editMessageText(
+  await bot.editMessageCaption(
     `🏦 Bạn đã chọn: ${bankName}\n\n` +
     'Vui lòng nhập số tài khoản:',
     {
       chat_id: msg.chat.id,
-      message_id: msg.message_id
+      message_id: msg.message_id,
+      parse_mode: 'Markdown'
     }
   );
 }
@@ -3159,9 +3183,13 @@ async function handleBankSelection(msg, account, bankCode) {
 async function handleAccountNumberInput(msg, account) {
   const accountNumber = msg.text.trim();
   if (!validateAccountNumber(account.userState.bankCode, accountNumber)) {
-    return bot.sendMessage(
+    return bot.sendPhoto(
       msg.chat.id,
-      '❌ Số tài khoản không hợp lệ. Vui lòng kiểm tra và nhập lại.'
+      ERROR_IMAGE_URL,
+      {
+        caption: '❌ Số tài khoản không hợp lệ. Vui lòng kiểm tra và nhập lại.',
+        parse_mode: 'Markdown'
+      }
     );
   }
 
@@ -3173,11 +3201,12 @@ async function handleAccountNumberInput(msg, account) {
   };
   await account.save();
 
-  await bot.editMessageText(
+  await bot.editMessageCaption(
     '👤 Vui lòng nhập tên chủ tài khoản (VIẾT HOA KHÔNG DẤU):',
     {
       chat_id: msg.chat.id,
-      message_id: account.userState.lastMessageId
+      message_id: account.userState.lastMessageId,
+      parse_mode: 'Markdown'
     }
   );
 }
@@ -3185,9 +3214,13 @@ async function handleAccountNumberInput(msg, account) {
 async function handleAccountNameInput(msg, account) {
   const accountName = msg.text.trim().toUpperCase();
   if (!validateAccountName(accountName)) {
-    return bot.sendMessage(
+    return bot.sendPhoto(
       msg.chat.id,
-      '❌ Tên chủ tài khoản không hợp lệ. Vui lòng nhập lại (chỉ sử dụng chữ cái và số, độ dài 5-50 ký tự).'
+      ERROR_IMAGE_URL,
+      {
+        caption: '❌ Tên chủ tài khoản không hợp lệ. Vui lòng nhập lại (chỉ sử dụng chữ cái và số, độ dài 5-50 ký tự).',
+        parse_mode: 'Markdown'
+      }
     );
   }
 
@@ -3197,23 +3230,25 @@ async function handleAccountNameInput(msg, account) {
   await account.save();
 
   const withdrawalMenu = getWithdrawalMenuMessage(account);
-  await bot.editMessageText(
-    withdrawalMenu.text,
+  await bot.editMessageCaption(
+    withdrawalMenu.caption,
     {
       chat_id: msg.chat.id,
       message_id: account.userState.lastMessageId,
-      ...withdrawalMenu.options
+      parse_mode: 'Markdown',
+      reply_markup: withdrawalMenu.options.reply_markup
     }
   );
 }
 
 async function handleWithdrawalRequest(msg, account) {
   if (account.vndc < MIN_WITHDRAWAL) {
-    return bot.editMessageText(
+    return bot.editMessageCaption(
       '❌ Số dư không đủ. Tối thiểu 20,000 VNDC.',
       {
         chat_id: msg.chat.id,
-        message_id: msg.message_id
+        message_id: msg.message_id,
+        parse_mode: 'Markdown'
       }
     );
   }
@@ -3221,12 +3256,13 @@ async function handleWithdrawalRequest(msg, account) {
   account.userState.currentState = STATES.WAITING_WITHDRAWAL_AMOUNT;
   await account.save();
 
-  await bot.editMessageText(
+  await bot.editMessageCaption(
     `💎 Số dư hiện tại: ${formatNumber2(account.vndc)} VNDC\n\n` +
     `📝 Vui lòng nhập số VNDC muốn rút (${formatNumber2(MIN_WITHDRAWAL)} - ${formatNumber2(MAX_WITHDRAWAL)}):`,
     {
       chat_id: msg.chat.id,
-      message_id: msg.message_id
+      message_id: msg.message_id,
+      parse_mode: 'Markdown'
     }
   );
 }
