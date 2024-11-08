@@ -3465,17 +3465,37 @@ async function handleWithdrawalHistory(msg, account) {
     });
   }
 
-  await bot.editMessageText(historyText, {
-    chat_id: msg.chat.id,
-    message_id: msg.message_id,
-    parse_mode: 'Markdown',
-    reply_markup: {
-      inline_keyboard: [[{
-        text: '🔙 Quay lại',
-        callback_data: 'back_to_withdrawal'
-      }]]
+  try {
+    // Thử cập nhật caption nếu message có hình ảnh
+    await bot.editMessageCaption(historyText, {
+      chat_id: msg.chat.id,
+      message_id: msg.message_id,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [[{
+          text: '🔙 Quay lại',
+          callback_data: 'back_to_withdrawal'
+        }]]
+      }
+    });
+  } catch (error) {
+    // Nếu không có hình ảnh, sử dụng editMessageText
+    if (error.description.includes('message to edit not found')) {
+      await bot.editMessageText(historyText, {
+        chat_id: msg.chat.id,
+        message_id: msg.message_id,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[{
+            text: '🔙 Quay lại',
+            callback_data: 'back_to_withdrawal'
+          }]]
+        }
+      });
+    } else {
+      throw error; // Ném lại lỗi nếu là lỗi khác
     }
-  });
+  }
 }
 
 function getStatusText(status) {
