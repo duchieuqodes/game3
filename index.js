@@ -4361,7 +4361,7 @@ const DAILY_REWARDS = [
 
 
 // Command handler
-bot.onText(/\/checkin|Điểm danh hàng ngày/, async (msg) => {
+bot.onText(/\/checkin|Điểm danh Hàng Ngày/, async (msg) => {
   try {
     const account = await Account.findOne({ userId: msg.from.id });
     if (!account) {
