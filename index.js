@@ -4315,15 +4315,7 @@ app.listen(PORT, () => {
 
 
 
-// Schema updates for Account
-const accountSchema = {
-  // ... existing fields ...
-  dailyCheckin: {
-    lastCheckin: Date,
-    streak: Number,
-    totalCheckins: Number
-  }
-};
+
 
 // Daily rewards configuration
 const DAILY_REWARDS = [
