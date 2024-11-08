@@ -4910,5 +4910,204 @@ function formatNumber(number) {
 
 
 
+// Command to show rankings
+bot.onText(/\Bảng xếp hạng/, async (msg) => {
+  try {
+    await sendRankingMenu(msg.chat.id);
+  } catch (error) {
+    handleError(error, msg.chat.id);
+  }
+});
 
+// Handle all callback queries
+bot.on('callback_query', async (callbackQuery) => {
+  try {
+    const data = callbackQuery.data;
+    const chatId = callbackQuery.message.chat.id;
+    const messageId = callbackQuery.message.message_id;
+    const userId = callbackQuery.from.id;
+
+    if (data === 'rankings') {
+      await showRankingMenu(chatId, messageId);
+    } else if (data.startsWith('rank_')) {
+      await handleRankingDisplay(data, chatId, messageId, userId);
+    }
+
+    await bot.answerCallbackQuery(callbackQuery.id);
+  } catch (error) {
+    handleCallbackError(error, callbackQuery);
+  }
+});
+
+// Helper Functions
+function createRankingKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '🏆 Xếp hạng Vàng', callback_data: 'rank_gold_1' },
+        { text: '💎 Xếp hạng VNDC', callback_data: 'rank_vndc_1' }
+      ],
+      [
+        { text: '💵 Xếp hạng VNĐ', callback_data: 'rank_vnd_1' }
+      ]
+    ]
+  };
+}
+
+async function sendRankingMenu(chatId) {
+  await bot.sendPhoto(chatId, 'https://iili.io/2IRSVAx.png', {
+    caption: '📊 *BẢNG XẾP HẠNG*\nChọn loại xếp hạng bạn muốn xem:',
+    parse_mode: 'Markdown',
+    reply_markup: createRankingKeyboard()
+  });
+}
+
+async function showRankingMenu(chatId, messageId) {
+  await bot.editMessageCaption('📊 *BẢNG XẾP HẠNG*\nChọn loại xếp hạng bạn muốn xem:', {
+    chat_id: chatId,
+    message_id: messageId,
+    parse_mode: 'Markdown',
+    reply_markup: createRankingKeyboard()
+  });
+}
+
+async function handleRankingDisplay(data, chatId, messageId, userId) {
+  const [, type, page] = data.split('_');
+  await showRanking(chatId, type, parseInt(page), userId, messageId);
+}
+
+async function showRanking(chatId, type, page, userId, messageId) {
+  const pageSize = 10;
+  const skip = (page - 1) * pageSize;
+
+  const rankingConfig = getRankingConfig(type);
+  const totalPlayers = await Account.countDocuments({ [rankingConfig.sortField]: { $gt: 0 } });
+  const totalPages = Math.ceil(totalPlayers / pageSize);
+
+  const topPlayers = await getTopPlayers(rankingConfig.sortField, skip, pageSize);
+  const userInfo = await getUserRankInfo(userId, rankingConfig.sortField);
+
+  const message = generateRankingMessage(rankingConfig, page, totalPages, topPlayers, userInfo, skip);
+  const keyboard = createNavigationKeyboard(page, totalPages, type);
+
+  await bot.editMessageCaption(message, {
+    chat_id: chatId,
+    message_id: messageId,
+    parse_mode: 'Markdown',
+    reply_markup: keyboard
+  });
+}
+
+function getRankingConfig(type) {
+  const configs = {
+    gold: {
+      sortField: 'gold',
+      title: '🏆 BẢNG XẾP HẠNG VÀNG',
+      symbol: '🏆'
+    },
+    vndc: {
+      sortField: 'vndc',
+      title: '💎 BẢNG XẾP HẠNG VNDC',
+      symbol: '💎'
+    },
+    vnd: {
+      sortField: 'vnd',
+      title: '💵 BẢNG XẾP HẠNG VNĐ',
+      symbol: '💵'
+    }
+  };
+  return configs[type];
+}
+
+async function getTopPlayers(sortField, skip, pageSize) {
+  return await Account.find({ [sortField]: { $gt: 0 } })
+    .select(`username fullName ${sortField}`)
+    .sort({ [sortField]: -1 })
+    .skip(skip)
+    .limit(pageSize);
+}
+
+async function getUserRankInfo(userId, sortField) {
+  const userData = await Account.findOne({ userId }).select(`username fullName ${sortField}`);
+  if (!userData) return null;
+
+  const userRank = await Account.countDocuments({
+    [sortField]: { $gt: userData[sortField] }
+  }) + 1;
+  return { userData, userRank };
+}
+
+function generateRankingMessage(config, page, totalPages, topPlayers, userInfo, skip) {
+  let message = `*${config.title}*\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `📄 Trang ${page}/${totalPages}\n\n`;
+
+  topPlayers.forEach((player, index) => {
+    const rank = skip + index + 1;
+    message += formatPlayerInfo(player, rank, config);
+  });
+
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  if (userInfo) {
+    message += formatUserRankInfo(userInfo, config);
+  }
+
+  return message;
+}
+
+function formatPlayerInfo(player, rank, config) {
+  const medal = getMedalForRank(rank);
+  return `${medal} *${player.username || 'Không tên'}*\n` +
+         `├ ${player.fullName || 'Không có'}\n` +
+         `└ ${formatNumber(player[config.sortField])} ${config.symbol}\n\n`;
+}
+
+function getMedalForRank(rank) {
+  const medals = {
+    1: '🥇',
+    2: '🥈',
+    3: '🥉'
+  };
+  return medals[rank] || `${rank}.`;
+}
+
+function formatUserRankInfo({ userData, userRank }, config) {
+  return `🎯 Hạng của bạn: #${userRank}\n` +
+         `└ ${formatNumber(userData[config.sortField])} ${config.symbol}\n`;
+}
+
+function createNavigationKeyboard(page, totalPages, type) {
+  const keyboard = [];
+
+  if (totalPages > 1) {
+    const navigationRow = [];
+    if (page > 1) {
+      navigationRow.push({ text: '⬅️ Trang trước', callback_data: `rank_${type}_${page-1}` });
+    }
+    if (page < totalPages) {
+      navigationRow.push({ text: 'Trang sau ➡️', callback_data: `rank_${type}_${page+1}` });
+    }
+    keyboard.push(navigationRow);
+  }
+
+  keyboard.push([{ text: '🔄 Đổi bảng xếp hạng', callback_data: 'rankings' }]);
+  return { inline_keyboard: keyboard };
+}
+
+function formatNumber(number) {
+  return number?.toLocaleString('en-US', {maximumFractionDigits: 0}) || '0';
+}
+
+function handleError(error, chatId) {
+  console.error('Error:', error);
+  bot.sendMessage(chatId, '❌ Có lỗi xảy ra, vui lòng thử lại sau.');
+}
+
+function handleCallbackError(error, callbackQuery) {
+  console.error('Callback Error:', error);
+  bot.answerCallbackQuery(callbackQuery.id, {
+    text: '❌ Có lỗi xảy ra, vui lòng thử lại sau.',
+    show_alert: true
+  });
+}
 
