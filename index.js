@@ -5038,27 +5038,50 @@ async function showRanking(chatId, type, page, userId) {
   });
 }
 
-// Add this to your existing callback query handler
-if (callbackQuery.data === 'rankings') {
-  const keyboard = {
-    inline_keyboard: [
-      [
-        { text: '🏆 Xếp hạng Vàng', callback_data: 'rank_gold_1' },
-        { text: '💎 Xếp hạng VNDC', callback_data: 'rank_vndc_1' }
-      ],
-      [
-        { text: '💵 Xếp hạng VNĐ', callback_data: 'rank_vnd_1' }
-      ]
-    ]
-  };
+// Handle ranking callback queries
+bot.on('callback_query', async (callbackQuery) => {
+  try {
+    const data = callbackQuery.data;
+    
+    // Handle rankings button click
+    if (data === 'rankings') {
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: '🏆 Xếp hạng Vàng', callback_data: 'rank_gold_1' },
+            { text: '💎 Xếp hạng VNDC', callback_data: 'rank_vndc_1' }
+          ],
+          [
+            { text: '💵 Xếp hạng VNĐ', callback_data: 'rank_vnd_1' }
+          ]
+        ]
+      };
 
-  await bot.editMessageText('📊 *BẢNG XẾP HẠNG*\nChọn loại xếp hạng bạn muốn xem:', {
-    chat_id: callbackQuery.message.chat.id,
-    message_id: callbackQuery.message.message_id,
-    parse_mode: 'Markdown',
-    reply_markup: keyboard
-  });
-}
+      await bot.editMessageText('📊 *BẢNG XẾP HẠNG*\nChọn loại xếp hạng bạn muốn xem:', {
+        chat_id: callbackQuery.message.chat.id,
+        message_id: callbackQuery.message.message_id,
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+      return;
+    }
+
+    // Handle ranking type selection
+    if (data.startsWith('rank_')) {
+      const [, type, page] = data.split('_');
+      await showRanking(callbackQuery.message.chat.id, type, parseInt(page), callbackQuery.from.id);
+      await bot.deleteMessage(callbackQuery.message.chat.id, callbackQuery.message.message_id);
+    }
+    
+    await bot.answerCallbackQuery(callbackQuery.id);
+  } catch (error) {
+    console.error('Error in ranking callback:', error);
+    bot.answerCallbackQuery(callbackQuery.id, {
+      text: '❌ Có lỗi xảy ra, vui lòng thử lại sau.',
+      show_alert: true
+    });
+  }
+});
 
 function formatNumber(number) {
   return number?.toLocaleString('en-US', {maximumFractionDigits: 0}) || '0';
