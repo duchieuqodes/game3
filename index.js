@@ -1924,17 +1924,17 @@ async function sendMiningStatus(chatId, account, messageId = null) {
 ━━━━━━━━━━━━━━━━━━━━
 💎 Số dư: *${account.vndc.toFixed(4)} VNDC*
 
-⚡️ *Trạng thái:* ${account.isMining ? '🟢 Đang đào' : '🔴 Dừng'}
+⚡️ *Trạng thái:* ${account.isMining ? '🟢 Đang đào' : '🔴 Đang Dừng'}
 └ ⏳ ${formatTimeRemaining(account.miningEndTime)}
 └ ${progressBar} ${Math.max(0, (miningProgress * 100)).toFixed(1)}%
 └ 📈 Tốc độ: ${currentMiningRate.toFixed(2)} VNDC/h
 
-🏝 *Thông tin đảo:*
+🏝 *Đảo cấp độ tiếp theo:*
 └ 📊 Cấp độ: ${currentLevel}
-└ 🔄 Nâng cấp: ${formatNumber(nextLevelCost)} VNDC
+└ 🔄 Phí nâng cấp: ${formatNumber(nextLevelCost)} VNDC
 └ ⚡️ Tốc độ mới: +${nextLevelRate.toFixed(2)} VNDC/h
 
-💡 *Mẹo tăng tốc:*
+💡 *Mẹo tăng tốc độ đào vndc:*
 • Nâng cấp đảo để tăng tốc độ đào
 • Duy trì đăng nhập để nhận thưởng
 • Mời bạn bè để nhận bonus`;
@@ -1942,8 +1942,8 @@ async function sendMiningStatus(chatId, account, messageId = null) {
   const inlineKeyboard = {
     inline_keyboard: [
       [
-        { text: '🔄 Làm mới', callback_data: MINING_ACTIONS.REFRESH },
-        { text: '⚡️ Nâng cấp đảo', callback_data: MINING_ACTIONS.UPGRADE }
+        { text: '🔄 Làm mới', callback_data: MINING_ACTIONS.REFRESH }
+        
       ],
       [
         account.isMining 
@@ -2103,21 +2103,15 @@ bot.onText(/Nạp tiền|\/deposit/, async (msg) => {
     const caption = `
 🏦 *HƯỚNG DẪN NẠP TIỀN*
 ━━━━━━━━━━━━━━━━━━━━
-
 💎 *Ưu đãi người mới:*
-• Nạp lần đầu: Thưởng thêm 20%
-• Nạp trong 24h: Thưởng thêm 10%
-• Giới thiệu bạn: +5% mỗi bạn
-
+• Nạp lần đầu: Tặng thêm 20% số tiền nạp
 💰 *Quy đổi:*
 • 1 VNĐ = 1 VNDC
-• Không giới hạn số lần nạp
-• Xử lý tự động 24/7
 
 📌 *Lưu ý:*
 • Nạp tối thiểu: 10,000 VNĐ
-• Giữ nguyên nội dung chuyển khoản
-• Tiền sẽ được cộng tự động sau 1-3 phút
+• Ghi đúng nội dung chuyển khoản
+• Tiền sẽ được cộng tự động sau 3-5 phút
 `;
 
     const inlineKeyboard = {
@@ -2207,6 +2201,15 @@ bot.on('message', async (msg) => {
     delete userStates[userId];
   }
 });
+
+function calculateChecksum(data) {
+  // Loại bỏ 4 ký tự cuối cùng là '6304' trước khi tính CRC-16
+  const dataWithout6304 = data.slice(0);
+
+  // Tính CRC-16 CCITT và lấy giá trị hex
+  const checksum = crc.crc16ccitt(dataWithout6304).toString(16).toUpperCase();
+  return checksum.padStart(4, '0'); // Đảm bảo có 4 ký tự
+}
 
 // Hàm tạo và gửi mã QR
 async function generateAndSendQR(chatId, userId, amount) {
@@ -2343,9 +2346,9 @@ bot.onText(/\/start/, async (msg) => {
         username: msg.from.username,
         gold: 100000,
         specialGemCount: 0,
-        vndc: 1000000,
-        spinCount: 10,
-        robberyCount: 5,
+        vndc: 100,
+        spinCount: 50,
+        robberyCount: 0,
         level: 1,
         exp: 0,
         islandImage: 'https://img.upanh.tv/2023/11/23/Cap0.jpg',
@@ -2436,6 +2439,11 @@ async function updateReferralVndc(userId, vndcAmount) {
   }
 }
 
+
+
+
+
+
 // Invite command handler
 bot.onText(/\/invite|Mời bạn/, async (msg) => {
   try {
@@ -2452,27 +2460,31 @@ bot.onText(/\/invite|Mời bạn/, async (msg) => {
     const botUsername = (await bot.getMe()).username;
     const inviteLink = `https://t.me/${botUsername}?start=ref_${account.referralCode}`;
 
-    const totalVndcEarned = account.referralList.reduce((sum, ref) => 
-      sum + (ref.totalVndcMined * 0.1), 0);
+    const totalVndcEarned = account.referralList.reduce((sum, ref) => {
+  const mined = ref.totalVndcMined || 0;
+  return sum + (mined * 0.1);
+}, 0);
 
     let referralListText = '';
     const pageSize = 10;
     const totalPages = Math.ceil(account.referralList.length / pageSize);
 
-    const formatReferralPage = (page) => {
-      const start = (page - 1) * pageSize;
-      const end = start + pageSize;
-      const pageReferrals = account.referralList.slice(start, end);
+    // Update the formatReferralPage function
+const formatReferralPage = (page) => {
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
+  const pageReferrals = account.referralList.slice(start, end);
 
-      return pageReferrals.map((ref, idx) => 
-        `${start + idx + 1}. ${ref.username}\n└ 💎 VNDC: ${(ref.totalVndcMined * 0.1).toFixed(4)}`
-      ).join('\n\n');
-    };
+  return pageReferrals.map((ref, idx) => {
+    const mined = ref.totalVndcMined || 0;
+    return `${start + idx + 1}. ${ref.username || `User${ref.userId}`}\n└ 💎 VNDC: ${(mined * 0.1).toFixed(4)}`;
+  }).join('\n\n');
+};
 
     const mainText = `
 🤝 *HỆ THỐNG GIỚI THIỆU*
 ━━━━━━━━━━━━━━━━━━━━
-📎 Link giới thiệu của bạn:
+📎 Link giới thiệu của bạn (hãy coppy):
 \`${inviteLink}\`
 
 📊 *Thống kê:*
@@ -2482,13 +2494,10 @@ bot.onText(/\/invite|Mời bạn/, async (msg) => {
 
 🎁 *Phần thưởng giới thiệu:*
 Người giới thiệu:
-└ 💰 5,000 Vàng
-└ 🎫 5 Lượt quay
-└ 💎 10% hoa hồng VNDC
+└ 💰 10,000 Vàng, 🎫 5 Lượt quay, 💎 10% hoa hồng VNDC từ người bạn giới thiệu nhận được
 
 Người được giới thiệu:
-└ 💰 50,000 Vàng
-└ 🎫 5 Lượt quay
+└ 💰 50,000 Vàng, 🎫 5 Lượt quay
 
 📋 *DANH SÁCH ĐÃ GIỚI THIỆU*
 ━━━━━━━━━━━━━━━━━━━━
@@ -2520,7 +2529,7 @@ ${formatReferralPage(1)}`;
       };
     };
 
-    await bot.sendPhoto(msg.chat.id, 'https://iili.io/2xTuUOJ.jpg', {
+    await bot.sendPhoto(msg.chat.id, 'https://iili.io/2IoaRsf.png', {
       caption: mainText,
       parse_mode: 'Markdown',
       reply_markup: getKeyboard(1)
@@ -2596,66 +2605,67 @@ bot.on('callback_query', async (callbackQuery) => {
     const msg = callbackQuery.message;
     const userId = callbackQuery.from.id;
 
-    if (action === 'claim_referral_vndc') {
-      const account = await Account.findOne({ userId });
-      if (!account) return;
+   if (action === 'claim_referral_vndc') {
+  const account = await Account.findOne({ userId });
+  if (!account) return;
 
-      let totalPendingVndc = 0;
-      const updatedReferrals = [];
+  let totalPendingVndc = 0;
+  const updatedReferrals = [];
 
-      // Tính toán hoa hồng cho từng người được giới thiệu
-      for (const ref of account.referralList) {
-        const referredAccount = await Account.findOne({ userId: ref.userId });
-        if (referredAccount) {
-          const currentTotalVndc = referredAccount.vndc;
-          const lastTotalVndc = ref.lastTotalVndc || 0;
+  // Tính toán hoa hồng cho từng người được giới thiệu
+  for (const ref of account.referralList) {
+    const referredAccount = await Account.findOne({ userId: ref.userId });
+    if (referredAccount) {
+      const currentTotalVndc = referredAccount.vndc || 0;
+      const lastTotalVndc = ref.lastTotalVndc || 0;
 
-          // Tính toán phần tăng thêm dựa trên tổng VNDC
-          const vndcIncrease = Math.max(0, currentTotalVndc - lastTotalVndc);
-          if (vndcIncrease > 0) {
-            const commission = vndcIncrease * 0.1;
-            totalPendingVndc += commission;
+      // Tính toán phần tăng thêm dựa trên tổng VNDC
+      const vndcIncrease = Math.max(0, currentTotalVndc - lastTotalVndc);
+      if (vndcIncrease > 0) {
+        const commission = vndcIncrease * 0.1;
+        totalPendingVndc += commission;
 
-            // Cập nhật số liệu mới
-            ref.lastTotalVndc = currentTotalVndc;
-            ref.lastClaimTime = new Date();
-            updatedReferrals.push({
-              username: ref.username,
-              increase: vndcIncrease,
-              commission: commission
-            });
-          }
-        }
-      }
-
-      if (totalPendingVndc > 0) {
-        // Cập nhật tài khoản người giới thiệu
-        account.vndc += totalPendingVndc;
-        account.totalReferralVndc += totalPendingVndc;
-        account.pendingReferralVndc = 0;
-        account.lastClaimTime = new Date();
-        await account.save();
-
-        // Tạo thông báo chi tiết
-        let message = `✅ Đã nhận ${totalPendingVndc.toFixed(4)} VNDC!\n\nChi tiết:\n`;
-        updatedReferrals.forEach(ref => {
-          message += `${ref.username}: +${ref.commission.toFixed(4)} VNDC (10% của ${ref.increase.toFixed(4)})\n`;
-        });
-
-        bot.answerCallbackQuery(callbackQuery.id, {
-          text: message,
-          show_alert: true
-        });
-
-        // Refresh màn hình
-        bot.emit('message', { ...msg, text: '/invite', from: { id: userId } });
-      } else {
-        bot.answerCallbackQuery(callbackQuery.id, {
-          text: '❌ Không có VNDC mới để claim!',
-          show_alert: true
+        // Cập nhật số liệu mới
+        ref.lastTotalVndc = currentTotalVndc;
+        ref.totalVndcMined = currentTotalVndc; // Cập nhật tổng VNDC đã mine
+        ref.lastClaimTime = new Date();
+        updatedReferrals.push({
+          username: ref.username || `User${ref.userId}`,
+          increase: vndcIncrease,
+          commission: commission
         });
       }
     }
+  }
+
+  if (totalPendingVndc > 0) {
+    // Cập nhật tài khoản người giới thiệu
+    account.vndc = (account.vndc || 0) + totalPendingVndc;
+    account.totalReferralVndc = (account.totalReferralVndc || 0) + totalPendingVndc;
+    account.pendingReferralVndc = 0;
+    account.lastClaimTime = new Date();
+    await account.save();
+
+    // Tạo thông báo chi tiết
+    let message = `✅ Đã nhận ${totalPendingVndc.toFixed(4)} VNDC!\n\nChi tiết:\n`;
+    updatedReferrals.forEach(ref => {
+      message += `${ref.username}: +${ref.commission.toFixed(4)} VNDC (10% của ${ref.increase.toFixed(4)})\n`;
+    });
+
+    await bot.answerCallbackQuery(callbackQuery.id, {
+      text: message,
+      show_alert: true
+    });
+
+    // Refresh màn hình
+    bot.emit('message', { ...msg, text: '/invite', from: { id: userId } });
+  } else {
+    await bot.answerCallbackQuery(callbackQuery.id, {
+      text: '❌ Không có VNDC mới để claim!',
+      show_alert: true
+    });
+  }
+}
     else if (action.startsWith('ref_page_')) {
       const page = parseInt(action.split('_')[2]);
       const account = await Account.findOne({ userId });
@@ -2935,7 +2945,7 @@ function getConfirmationMessage(account, amount) {
 
 
 // Modified command handlers to use sendPhoto instead of sendMessage
-bot.onText(/\/ruttien|Rút tiền VNDC/, async (msg) => {
+bot.onText(/\/ruttien|Rút tiền/, async (msg) => {
   try {
     const account = await Account.findOne({ userId: msg.from.id });
     if (!account) {
