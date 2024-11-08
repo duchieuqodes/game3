@@ -2315,7 +2315,7 @@ async function showMainMenu(chatId, userId) {
       keyboard: [
         [{ text: 'Xem tài khoản 🏝️' }],
         [{ text: 'Vòng quay 🎰' }, { text: 'Đào VNDC ⛏️' }],
-        [{ text: 'Nâng Cấp Hòn Đảo 🚀' }],
+        [{ text: 'Nâng Cấp Hòn Đảo 🚀' }, { text: 'Bảng xếp hạng 🥇' }],
         [{ text: 'Điểm Danh Hàng Ngày 🏴‍☠️' }, { text: 'Cửa Hàng 🏪' }],
         [{ text: 'Nạp tiền 💵' }, { text: 'Rút tiền 💸' }],
         [{ text: 'Mời bạn bè 📨' }, { text: 'Nhiệm vụ 🎯' }]
@@ -2341,6 +2341,42 @@ async function showMainMenu(chatId, userId) {
 
 
 
+// Message handler to check and update fullName - using memory cache
+const checkedUsers = new Set(); // Cache to store users that have been checked
+
+// Message handler to check and update fullName
+bot.on('message', async (msg) => {
+  const userId = msg.from.id;
+  
+  // Skip if user has been checked before
+  if (checkedUsers.has(userId)) return;
+  
+  try {
+    let account = await Account.findOne({ userId });
+    
+    if (account) {
+      // If account has fullName, add to checked list and skip
+      if (account.fullName) {
+        checkedUsers.add(userId);
+        return;
+      }
+      
+      // Update fullName if missing
+      const fullName = [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ');
+      if (fullName) {
+        await Account.updateOne(
+          { userId },
+          { $set: { fullName } }
+        );
+      }
+      // Add to checked list after updating
+      checkedUsers.add(userId);
+    }
+  } catch (error) {
+    console.error('Error updating fullName:', error);
+  }
+});
+
 // Modify the start command to use the main menu function
 bot.onText(/\/start/, async (msg) => {
   const userId = msg.from.id;
@@ -2348,19 +2384,28 @@ bot.onText(/\/start/, async (msg) => {
     let account = await Account.findOne({ userId });
 
     if (!account) {
+      // Create new account for new player
+      const fullName = [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ');
       account = new Account({
         userId,
         username: msg.from.username,
+        fullName: fullName || '',
         gold: 100000,
         specialGemCount: 0,
-        vndc: 100,
-        spinCount: 50,
-        robberyCount: 0,
+        vndc: 1000000,
+        spinCount: 10,
+        robberyCount: 5,
         level: 1,
         exp: 0,
         islandImage: 'https://img.upanh.tv/2023/11/23/Cap0.jpg',
       });
       await account.save();
+      
+      // Add new user to checked list since they have fullName
+      checkedUsers.add(userId);
+      
+      // Notify about new player
+      await notifyNewPlayer(account);
     }
 
     await showMainMenu(msg.chat.id, userId);
@@ -4571,4 +4616,453 @@ function isConsecutiveDay(lastDate, currentDate) {
   currDay.setHours(0, 0, 0, 0);
   const diffDays = Math.round((currDay - lastDay) / oneDayMs);
   return diffDays === 1;
+}
+
+
+
+
+
+
+
+
+
+
+// Thêm command để xem danh sách người chơi
+bot.onText(/\/players/, async (msg) => {
+  try {
+    // Kiểm tra quyền admin
+    if (msg.from.id !== -10038972420) {
+      return bot.sendMessage(msg.chat.id, '❌ Bạn không có quyền sử dụng lệnh này!');
+    }
+
+    await showPlayerList(msg.chat.id, 1);
+
+  } catch (error) {
+    console.error('Error in players command:', error);
+    bot.sendMessage(msg.chat.id, '❌ Có lỗi xảy ra, vui lòng thử lại sau.');
+  }
+});
+
+// Hàm hiển thị danh sách người chơi
+async function showPlayerList(chatId, page) {
+  const pageSize = 10;
+  const skip = (page - 1) * pageSize;
+
+  // Lấy tổng số người chơi
+  const totalPlayers = await Account.countDocuments();
+  const totalPages = Math.ceil(totalPlayers / pageSize);
+
+  // Lấy danh sách người chơi theo trang
+  const players = await Account.find()
+    .sort({ createdAt: -1 }) // Sắp xếp theo thời gian tạo mới nhất
+    .skip(skip)
+    .limit(pageSize);
+
+  let message = `👥 *DANH SÁCH NGƯỜI CHƠI*\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `📄 Trang ${page}/${totalPages}\n\n`;
+
+  players.forEach((player, index) => {
+    message += `*${skip + index + 1}. ${player.username || 'Không tên'}*\n`;
+    message += `└ 🆔 ID: \`${player.userId}\`\n`;
+    message += `└ 💰 Vàng: ${player.gold?.toLocaleString() || 0}\n`;
+    message += `└ 💎 VNDC: ${player.vndc?.toLocaleString() || 0}\n`;
+    message += `└ 💵 VNĐ: ${player.vnd?.toLocaleString() || 0}\n`;
+    message += `└ 🏝 Cấp độ đảo: ${player.islandLevel || 1}\n`;
+    message += `└ 🎫 Lượt quay: ${player.spinCount || 0}\n`;
+    message += `└ 👥 Lượt mời: ${player.referralCount || 0}\n`;
+    message += `└ ⏰ Hoạt động: ${formatLastActive(player.lastActive)}\n`;
+    message += `\n`;
+  });
+
+  // Tạo nút điều hướng trang
+  const keyboard = [];
+  const navigation = [];
+
+  if (page > 1) {
+    navigation.push({ text: '⬅️ Trang trước', callback_data: `players_${page-1}` });
+  }
+  
+  if (page < totalPages) {
+    navigation.push({ text: 'Trang sau ➡️', callback_data: `players_${page+1}` });
+  }
+
+  if (navigation.length > 0) {
+    keyboard.push(navigation);
+  }
+
+  await bot.sendMessage(chatId, message, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard.length > 0 ? {
+      inline_keyboard: keyboard
+    } : undefined
+  });
+}
+
+// Xử lý nút chuyển trang
+bot.on('callback_query', async (callbackQuery) => {
+  try {
+    const action = callbackQuery.data;
+    
+    if (action.startsWith('players_')) {
+      const page = parseInt(action.split('_')[1]);
+      await bot.deleteMessage(callbackQuery.message.chat.id, callbackQuery.message.message_id);
+      await showPlayerList(callbackQuery.message.chat.id, page);
+    }
+
+  } catch (error) {
+    console.error('Error in callback query:', error);
+    bot.answerCallbackQuery(callbackQuery.id, {
+      text: '❌ Có lỗi xảy ra, vui lòng thử lại sau.',
+      show_alert: true
+    });
+  }
+});
+
+// Middleware để tự động thông báo người chơi mới
+// Thêm vào phần xử lý đăng ký tài khoản
+async function notifyNewPlayer(account) {
+  try {
+    const message = `
+🎉 *NGƯỜI CHƠI MỚI THAM GIA*
+━━━━━━━━━━━━━━━━━━━━
+👤 *Thông tin người chơi:*
+└ Tên: ${account.username || 'Không tên'}
+└ ID: \`${account.userId}\`
+└ Thời gian: ${formatDate(account.createdAt)}
+
+💰 *Tài sản:*
+└ Vàng: ${account.gold?.toLocaleString() || 0}
+└ VNDC: ${account.vndc?.toLocaleString() || 0}
+└ VNĐ: ${account.vnd?.toLocaleString() || 0}
+
+🎮 *Trạng thái:*
+└ Cấp độ đảo: ${account.currentLevel || 1}
+└ Lượt quay: ${account.spinCount || 0}
+`;
+
+    // Gửi thông báo cho admin
+    await bot.sendMessage(-10038972420, message, {
+      parse_mode: 'Markdown'
+    });
+
+  } catch (error) {
+    console.error('Error in notifying new player:', error);
+  }
+}
+
+// Hàm hỗ trợ format thời gian hoạt động gần nhất
+function formatLastActive(date) {
+  if (!date) return 'Chưa hoạt động';
+
+  const now = new Date();
+  const lastActive = new Date(date);
+  const diffTime = Math.abs(now - lastActive);
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  const diffHours = Math.floor((diffTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const diffMinutes = Math.floor((diffTime % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (diffDays > 0) {
+    return `${diffDays} ngày trước`;
+  } else if (diffHours > 0) {
+    return `${diffHours} giờ trước`;
+  } else if (diffMinutes > 0) {
+    return `${diffMinutes} phút trước`;
+  } else {
+    return 'Vừa xong';
+  }
+}
+
+// Hàm format ngày tháng
+function formatDate(date) {
+  if (!date) return '';
+  
+  const d = new Date(date);
+  const day = d.getDate().toString().padStart(2, '0');
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const year = d.getFullYear();
+  const hour = d.getHours().toString().padStart(2, '0');
+  const minute = d.getMinutes().toString().padStart(2, '0');
+
+  return `${day}/${month}/${year} ${hour}:${minute}`;
+}
+
+// Cập nhật Schema Account để thêm các trường mới
+const accountSchema = new mongoose.Schema({
+  // ... các trường hiện có ...
+  lastActive: { type: Date, default: Date.now },
+  referralCount: { type: Number, default: 0 },
+  createdAt: { type: Date, default: Date.now }
+});
+
+// Middleware để tự động cập nhật thời gian hoạt động
+accountSchema.pre('save', function(next) {
+  this.lastActive = new Date();
+  next();
+});
+
+
+
+
+
+
+
+bot.onText(/\/xemnguoichoi/, async (msg) => {
+  try {
+    if (msg.from.id !== 7305842707) {
+      return bot.sendMessage(msg.chat.id, '❌ Bạn không có quyền sử dụng lệnh này!');
+    }
+    await showPlayerList(msg.chat.id, 1);
+  } catch (error) {
+    console.error('Error in players command:', error);
+    bot.sendMessage(msg.chat.id, '❌ Có lỗi xảy ra, vui lòng thử lại sau.');
+  }
+});
+
+async function showPlayerList(chatId, page) {
+  const pageSize = 10;
+  const skip = (page - 1) * pageSize;
+  const totalPlayers = await Account.countDocuments();
+  const totalPages = Math.ceil(totalPlayers / pageSize);
+
+  const players = await Account.find()
+    .sort({ _id: -1 })
+    .skip(skip)
+    .limit(pageSize);
+
+  let message = `👥 *DANH SÁCH NGƯỜI CHƠI*\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `📄 Trang ${page}/${totalPages}\n\n`;
+
+  for (let i = 0; i < players.length; i++) {
+    const player = players[i];
+    const miningStatus = player.isMining ? 'Đang đào 🟢' : ' không đào🔴';
+    const bankStatus = player.bankInfo?.isVerified ? 'đã XT ✅' : 'Chưa XT❌';
+
+    message += `${skip + i + 1}. *${player.username || 'Không tên'}*\n`;
+    message += `├ Tên: ${player.fullName || 'Không có'}\n`;
+    message += `├ ID: \`${player.userId}\` ${miningStatus} ${bankStatus}\n`;
+    message += `└ VNDC: ${formatNumber(player.vndc)}\n`;
+    message += `├ Vàng: ${formatNumber(player.gold)}\n`;
+    message += `│ ├ Lượt quay: ${player.spinCount}\n`;
+    message += `│ └ Điểm danh: ${player.dailyCheckin.totalCheckins} lần\n`;
+    message += `│ └ Đảo: ${player.islandUpgradeCount} nâng cấp\n\n`;
+  }
+
+  const keyboard = [];
+  if (totalPages > 1) {
+    const row = [];
+    if (page > 1) {
+      row.push({ text: '⬅️ Trang trước', callback_data: `players_${page-1}` });
+    }
+    if (page < totalPages) {
+      row.push({ text: 'Trang sau ➡️', callback_data: `players_${page+1}` });
+    }
+    keyboard.push(row);
+  }
+
+  await bot.sendMessage(chatId, message, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard.length > 0 ? { inline_keyboard: keyboard } : undefined
+  });
+}
+
+bot.on('callback_query', async (callbackQuery) => {
+  try {
+    const action = callbackQuery.data;
+    if (action.startsWith('players_')) {
+      const page = parseInt(action.split('_')[1]);
+      await bot.deleteMessage(callbackQuery.message.chat.id, callbackQuery.message.message_id);
+      await showPlayerList(callbackQuery.message.chat.id, page);
+    }
+    await bot.answerCallbackQuery(callbackQuery.id);
+  } catch (error) {
+    console.error('Error in callback query:', error);
+    bot.answerCallbackQuery(callbackQuery.id, {
+      text: '❌ Có lỗi xảy ra, vui lòng thử lại sau.',
+      show_alert: true
+    });
+  }
+});
+
+async function notifyNewPlayer(account) {
+  try {
+    const message = `
+🎉 *NGƯỜI CHƠI MỚI*
+━━━━━━━━━━━━━━━━
+👤 Tên: ${account.username || 'Không tên'}
+👥 Họ và tên: ${account.fullName || 'Không có'}
+🆔 ID: \`${account.userId}\`
+💰 VNDC: ${formatNumber(account.vndc)}
+${account.referredBy ? `👥 Ref: \`${account.referredBy}\`` : ''}`;
+
+    await bot.sendMessage(-10038972420, message, {
+      parse_mode: 'Markdown'
+    });
+  } catch (error) {
+    console.error('Error in notifying new player:', error);
+  }
+}
+
+function formatNumber(number) {
+  return number?.toLocaleString('en-US', {maximumFractionDigits: 0}) || '0';
+}
+
+// Command to show rankings
+bot.onText(/\/Bảng xếp hạng/, async (msg) => {
+  try {
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '🏆 Xếp hạng Vàng', callback_data: 'rank_gold_1' },
+          { text: '💎 Xếp hạng VNDC', callback_data: 'rank_vndc_1' }
+        ],
+        [
+          { text: '💵 Xếp hạng VNĐ', callback_data: 'rank_vnd_1' }
+        ]
+      ]
+    };
+
+    await bot.sendMessage(msg.chat.id, '📊 *BẢNG XẾP HẠNG*\nChọn loại xếp hạng bạn muốn xem:', {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard
+    });
+  } catch (error) {
+    console.error('Error in rankings command:', error);
+    bot.sendMessage(msg.chat.id, '❌ Có lỗi xảy ra, vui lòng thử lại sau.');
+  }
+});
+
+// Handle ranking callback queries
+bot.on('callback_query', async (callbackQuery) => {
+  try {
+    const data = callbackQuery.data;
+    if (data.startsWith('rank_')) {
+      const [, type, page] = data.split('_');
+      await showRanking(callbackQuery.message.chat.id, type, parseInt(page), callbackQuery.from.id);
+      await bot.deleteMessage(callbackQuery.message.chat.id, callbackQuery.message.message_id);
+    }
+    await bot.answerCallbackQuery(callbackQuery.id);
+  } catch (error) {
+    console.error('Error in ranking callback:', error);
+    bot.answerCallbackQuery(callbackQuery.id, {
+      text: '❌ Có lỗi xảy ra, vui lòng thử lại sau.',
+      show_alert: true
+    });
+  }
+});
+
+async function showRanking(chatId, type, page, userId) {
+  const pageSize = 10;
+  const skip = (page - 1) * pageSize;
+  
+  // Define sort field and title based on type
+  let sortField, title, rankingImage;
+  switch (type) {
+    case 'gold':
+      sortField = 'gold';
+      title = '🏆 BẢNG XẾP HẠNG VÀNG';
+      rankingImage = 'https://iili.io/2IRSVAx.png';
+      break;
+    case 'vndc':
+      sortField = 'vndc';
+      title = '💎 BẢNG XẾP HẠNG VNDC';
+      rankingImage = 'https://iili.io/2IRSVAx.png';
+      break;
+    case 'vnd':
+      sortField = 'vnd';
+      title = '💵 BẢNG XẾP HẠNG VNĐ';
+      rankingImage = 'https://iili.io/2IRSVAx.pngg';
+      break;
+  }
+
+  // Get total players and calculate total pages
+  const totalPlayers = await Account.countDocuments();
+  const totalPages = Math.min(Math.ceil(totalPlayers / pageSize), 2); // Maximum 2 pages (20 players)
+
+  // Get top players for current page
+  const topPlayers = await Account.find()
+    .sort({ [sortField]: -1 })
+    .skip(skip)
+    .limit(pageSize);
+
+  // Get user's rank and data
+  const userData = await Account.findOne({ userId });
+  const userRank = await Account.countDocuments({
+    [sortField]: { $gt: userData.get(sortField) }
+  }) + 1;
+
+  // Generate ranking message
+  let message = `*${title}*\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `📄 Trang ${page}/${totalPages}\n\n`;
+
+  topPlayers.forEach((player, index) => {
+    const rank = skip + index + 1;
+    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}.`;
+    
+    message += `${medal} *${player.username || 'Không tên'}*\n`;
+    message += `├ ${player.fullName || 'Không có'}\n`;
+    message += `├ Vàng: ${formatNumber(player.gold)} 🏆\n`;
+    message += `├ VNDC: ${formatNumber(player.vndc)} 💎\n`;
+    message += `└ VNĐ: ${formatNumber(player.vnd)} 💵\n\n`;
+  });
+
+  // Add user's rank and stats at the bottom
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `🎯 Hạng của bạn: #${userRank}\n`;
+  message += `├ Vàng: ${formatNumber(userData.gold)} 🏆\n`;
+  message += `├ VNDC: ${formatNumber(userData.vndc)} 💎\n`;
+  message += `└ VNĐ: ${formatNumber(userData.vnd)} 💵\n`;
+
+  // Create navigation keyboard
+  const keyboard = [];
+  if (totalPages > 1) {
+    const row = [];
+    if (page > 1) {
+      row.push({ text: '⬅️ Trang trước', callback_data: `rank_${type}_${page-1}` });
+    }
+    if (page < totalPages) {
+      row.push({ text: 'Trang sau ➡️', callback_data: `rank_${type}_${page+1}` });
+    }
+    keyboard.push(row);
+  }
+  
+  // Add button to switch ranking types
+  keyboard.push([
+    { text: '🔄 Đổi bảng xếp hạng', callback_data: 'rankings' }
+  ]);
+
+  // Send ranking image with caption
+  await bot.sendPhoto(chatId, rankingImage, {
+    caption: message,
+    parse_mode: 'Markdown',
+    reply_markup: { inline_keyboard: keyboard }
+  });
+}
+
+// Add this to your existing callback query handler
+if (callbackQuery.data === 'rankings') {
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: '🏆 Xếp hạng Vàng', callback_data: 'rank_gold_1' },
+        { text: '💎 Xếp hạng VNDC', callback_data: 'rank_vndc_1' }
+      ],
+      [
+        { text: '💵 Xếp hạng VNĐ', callback_data: 'rank_vnd_1' }
+      ]
+    ]
+  };
+
+  await bot.editMessageText('📊 *BẢNG XẾP HẠNG*\nChọn loại xếp hạng bạn muốn xem:', {
+    chat_id: callbackQuery.message.chat.id,
+    message_id: callbackQuery.message.message_id,
+    parse_mode: 'Markdown',
+    reply_markup: keyboard
+  });
+}
+
+function formatNumber(number) {
+  return number?.toLocaleString('en-US', {maximumFractionDigits: 0}) || '0';
 }
