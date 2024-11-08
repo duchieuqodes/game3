@@ -45,6 +45,13 @@ const accountSchema = new mongoose.Schema({
   islandUpgradeCount: { type: Number, default: 0 },
   currentIslandImageUrl: { type: String, default: 'default-island-url' },
 
+  // điểm danh
+   dailyCheckin: {
+    lastCheckin: Date,
+    streak: Number,
+    totalCheckins: Number
+  },
+
   // Gift box system
   giftBoxCount: { type: Number, default: 0 },
   currentGiftBoxMilestone: { type: Number, default: 0 },
@@ -2090,7 +2097,7 @@ bot.on('callback_query', async (callbackQuery) => {
 
 
 // Thêm các hằng số mới
-const DEPOSIT_IMAGE = 'https://iili.io/2o4qDvt.jpg'; // Thay bằng 
+const DEPOSIT_IMAGE = 'https://iili.io/2IofhyN.png'; // Thay bằng 
 const BANK_NAME = 'BIDV';
 const BANK_ACCOUNT = '1160454275';
 const BANK_OWNER = 'CAN DUC HIEU';
@@ -4299,3 +4306,250 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server đang chạy tại cổng ${PORT}`);
 });
+
+
+
+
+
+
+
+
+
+// Schema updates for Account
+const accountSchema = {
+  // ... existing fields ...
+  dailyCheckin: {
+    lastCheckin: Date,
+    streak: Number,
+    totalCheckins: Number
+  }
+};
+
+// Daily rewards configuration
+const DAILY_REWARDS = [
+  { day: 1, gold: 10000, spins: 2 },
+  { day: 2, gold: 15000, spins: 3 },
+  { day: 3, gold: 25000, spins: 4 },
+  { day: 4, gold: 40000, spins: 5 },
+  { day: 5, gold: 60000, spins: 6 },
+  { day: 6, gold: 90000, spins: 8 },
+  { day: 7, gold: 120000, spins: 10, vndc: 500 },
+  { day: 8, gold: 150000, spins: 12 },
+  { day: 9, gold: 200000, spins: 15 },
+  { day: 10, gold: 300000, spins: 20 },
+  { day: 11, gold: 400000, spins: 25 },
+  { day: 12, gold: 500000, spins: 30 },
+  { day: 13, gold: 700000, spins: 35 },
+  { day: 14, gold: 900000, spins: 40, vndc: 700 },
+  { day: 15, gold: 1200000, spins: 50 },
+  { day: 16, gold: 1500000, spins: 60 },
+  { day: 17, gold: 1800000, spins: 70 },
+  { day: 18, gold: 2200000, spins: 80 },
+  { day: 19, gold: 2600000, spins: 90 },
+  { day: 20, gold: 3000000, spins: 100 },
+  { day: 21, gold: 3500000, spins: 120 },
+  { day: 22, gold: 4000000, spins: 140 },
+  { day: 23, gold: 5000000, spins: 160 },
+  { day: 24, gold: 6000000, spins: 180 },
+  { day: 25, gold: 7000000, spins: 200 },
+  { day: 26, gold: 8000000, spins: 220 },
+  { day: 27, gold: 9000000, spins: 240 },
+  { day: 28, gold: 10000000, spins: 260 },
+  { day: 29, gold: 12000000, spins: 280 },
+  { day: 30, gold: 15000000, spins: 300, vndc: 1000 }
+];
+
+
+// Command handler
+bot.onText(/\/checkin|Điểm danh hàng ngày/, async (msg) => {
+  try {
+    const account = await Account.findOne({ userId: msg.from.id });
+    if (!account) {
+      return bot.sendMessage(msg.chat.id, '❌ Không tìm thấy tài khoản!');
+    }
+
+    const mainText = generateCheckinText(account);
+    
+    await bot.sendPhoto(msg.chat.id, 'https://iili.io/2IzPsIV.png', {
+      caption: mainText,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '✅ Điểm Danh Ngay', callback_data: 'do_checkin' }],
+          [{ text: '📋 Xem Phần Thưởng', callback_data: 'view_rewards' }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in checkin command:', error);
+    bot.sendMessage(msg.chat.id, '❌ Có lỗi xảy ra, vui lòng thử lại sau.');
+  }
+});
+
+// Callback handler
+bot.on('callback_query', async (callbackQuery) => {
+  try {
+    const action = callbackQuery.data;
+    const msg = callbackQuery.message;
+    const userId = callbackQuery.from.id;
+
+    if (action === 'do_checkin') {
+      const account = await Account.findOne({ userId });
+      if (!account) return;
+
+      const now = new Date();
+      const lastCheckin = account.dailyCheckin?.lastCheckin;
+      
+      // Check if already checked in today
+      if (lastCheckin && isSameDay(lastCheckin, now)) {
+        return bot.answerCallbackQuery(callbackQuery.id, {
+          text: '❌ Bạn đã điểm danh hôm nay rồi!\nQuay lại vào ngày mai nhé!',
+          show_alert: true
+        });
+      }
+
+      // Check if streak should reset
+      if (lastCheckin && !isConsecutiveDay(lastCheckin, now)) {
+        account.dailyCheckin.streak = 0;
+      }
+
+      // Update streak and get rewards
+      account.dailyCheckin = account.dailyCheckin || {};
+      account.dailyCheckin.streak++;
+      account.dailyCheckin.lastCheckin = now;
+      account.dailyCheckin.totalCheckins = (account.dailyCheckin.totalCheckins || 0) + 1;
+
+      const reward = DAILY_REWARDS.find(r => r.day === account.dailyCheckin.streak) || 
+                    DAILY_REWARDS[DAILY_REWARDS.length - 1];
+
+      // Apply rewards
+      account.gold += reward.gold;
+      account.spinCount += reward.spins;
+      if (reward.vndc) {
+        account.vndc += reward.vndc;
+      }
+
+      await account.save();
+
+      // Generate reward message
+      let rewardMsg = `🎉 *ĐIỂM DANH THÀNH CÔNG*\n`;
+      rewardMsg += `━━━━━━━━━━━━━━━━━━━━\n`;
+      rewardMsg += `📅 Ngày điểm danh thứ: ${account.dailyCheckin.streak}\n\n`;
+      rewardMsg += `🎁 Phần thưởng nhận được:\n`;
+      rewardMsg += `└ 💰 +${reward.gold.toLocaleString()} Vàng\n`;
+      rewardMsg += `└ 🎫 +${reward.spins} Lượt quay\n`;
+      if (reward.vndc) {
+        rewardMsg += `└ 💎 +${reward.vndc} VNDC\n`;
+      }
+      
+      if ([7, 14, 30].includes(account.dailyCheckin.streak)) {
+        rewardMsg += `\n🌟 CHÚC MỪNG! Bạn đã nhận được phần thưởng đặc biệt!`;
+      }
+
+      await bot.editMessageCaption(rewardMsg, {
+        chat_id: msg.chat.id,
+        message_id: msg.message_id,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔄 Làm mới', callback_data: 'refresh_checkin' }]
+          ]
+        }
+      });
+
+    } else if (action === 'view_rewards') {
+      const rewardsText = generateRewardsText();
+      
+      await bot.editMessageCaption(rewardsText, {
+        chat_id: msg.chat.id,
+        message_id: msg.message_id,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '◀️ Quay lại', callback_data: 'refresh_checkin' }]
+          ]
+        }
+      });
+    } else if (action === 'refresh_checkin') {
+      const account = await Account.findOne({ userId });
+      const mainText = generateCheckinText(account);
+      
+      await bot.editMessageCaption(mainText, {
+        chat_id: msg.chat.id,
+        message_id: msg.message_id,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '✅ Điểm Danh Ngay', callback_data: 'do_checkin' }],
+            [{ text: '📋 Xem Phần Thưởng', callback_data: 'view_rewards' }]
+          ]
+        }
+      });
+    }
+
+  } catch (error) {
+    console.error('Error in callback query:', error);
+  }
+});
+
+// Helper functions
+function generateCheckinText(account) {
+  const streak = account.dailyCheckin?.streak || 0;
+  const totalCheckins = account.dailyCheckin?.totalCheckins || 0;
+  const lastCheckin = account.dailyCheckin?.lastCheckin;
+  
+  let text = `
+📝 *HỆ THỐNG ĐIỂM DANH HÀNG NGÀY*
+━━━━━━━━━━━━━━━━━━━━
+👤 Người chơi: \`${account.username}\`
+
+📊 *Thống kê điểm danh:*
+└ 🔥 Chuỗi hiện tại: ${streak} ngày
+└ 📅 Tổng số lần: ${totalCheckins} lần
+
+⏰ *Trạng thái:* ${lastCheckin && isSameDay(lastCheckin, new Date()) 
+  ? '✅ Đã điểm danh hôm nay'
+  : '❌ Chưa điểm danh hôm nay'}
+
+🎯 *Mốc điểm danh đặc biệt:*
+└ 7️⃣ Ngày: +500 VNDC
+└ 1️⃣4️⃣ Ngày: +700 VNDC
+└ 3️⃣0️⃣ Ngày: +1000 VNDC
+
+💡 Lưu ý: Bỏ lỡ một ngày sẽ làm mất chuỗi điểm danh!
+`;
+  return text;
+}
+
+function generateRewardsText() {
+  let text = `
+📋 *BẢNG PHẦN THƯỞNG ĐIỂM DANH*
+━━━━━━━━━━━━━━━━━━━━
+
+`;
+
+  DAILY_REWARDS.forEach(reward => {
+    text += `*Ngày ${reward.day}:*\n`;
+    text += `└ 💰 ${reward.gold.toLocaleString()} Vàng\n`;
+    text += `└ 🎫 ${reward.spins} Lượt quay\n`;
+    if (reward.vndc) {
+      text += `└ 💎 ${reward.vndc} VNDC\n`;
+    }
+    text += '\n';
+  });
+
+  return text;
+}
+
+function isSameDay(date1, date2) {
+  return date1.getFullYear() === date2.getFullYear() &&
+         date1.getMonth() === date2.getMonth() &&
+         date1.getDate() === date2.getDate();
+}
+
+function isConsecutiveDay(lastDate, currentDate) {
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const diffDays = Math.round((currentDate - lastDate) / oneDayMs);
+  return diffDays === 1;
+}
