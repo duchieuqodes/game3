@@ -2891,11 +2891,15 @@ function getConfirmationKeyboard(amount) {
   };
 }
 
-// Message templates
+// Add new constant for image URL
+const WITHDRAWAL_IMAGE_URL = 'https://iili.io/2Iferga.png'; // Replace with actual image URL
+
+// Modified message templates to include image
 function getWithdrawalMenuMessage(account) {
   const hasLinkedBank = account.bankInfo && account.bankInfo.isVerified;
   return {
-    text: `🏧 *THÔNG TIN RÚT TIỀN*\n\n` +
+    photo: WITHDRAWAL_IMAGE_URL,
+    caption: `🏧 *THÔNG TIN RÚT TIỀN*\n\n` +
       `💎 Số dư VNDC: ${formatNumber(account.vndc)}\n` +
       `💵 Tỷ giá: 1 VNDC = 1 VNĐ\n` +
       `📊 Số tiền tối thiểu: ${formatNumber(MIN_WITHDRAWAL)} VNDC\n` +
@@ -2915,7 +2919,8 @@ function getWithdrawalMenuMessage(account) {
 
 function getConfirmationMessage(account, amount) {
   return {
-    text: `🔄 *XÁC NHẬN RÚT TIỀN*\n\n` +
+    photo: WITHDRAWAL_IMAGE_URL,
+    caption: `🔄 *XÁC NHẬN RÚT TIỀN*\n\n` +
       `💎 Số tiền: ${formatNumber(amount)} VNDC\n` +
       `🏦 Ngân hàng: ${BANK_LIST[account.bankInfo.bankCode].name}\n` +
       `👤 Chủ TK: ${account.bankInfo.accountName}\n` +
@@ -2929,8 +2934,8 @@ function getConfirmationMessage(account, amount) {
 }
 
 
-// Command handlers
-bot.onText(/\/ruttien|Rút tiền/, async (msg) => {
+// Modified command handlers to use sendPhoto instead of sendMessage
+bot.onText(/\/ruttien|Rút tiền VNDC/, async (msg) => {
   try {
     const account = await Account.findOne({ userId: msg.from.id });
     if (!account) {
@@ -2947,10 +2952,13 @@ bot.onText(/\/ruttien|Rút tiền/, async (msg) => {
     await account.save();
 
     const withdrawalMenu = getWithdrawalMenuMessage(account);
-    const sentMessage = await bot.sendMessage(
+    const sentMessage = await bot.sendPhoto(
       msg.chat.id,
-      withdrawalMenu.text,
-      withdrawalMenu.options
+      withdrawalMenu.photo,
+      {
+        caption: withdrawalMenu.caption,
+        ...withdrawalMenu.options
+      }
     );
 
     // Update lastMessageId
@@ -3028,7 +3036,7 @@ bot.on('callback_query', async (callbackQuery) => {
           account.userId,
           `✅ *GIAO DỊCH THÀNH CÔNG*\n\n` +
           `🆔 Mã GD: #${transactionId.slice(-6)}\n` +
-          `💎 Số tiền: ${formatNumber(withdrawal.amount)} VNDC đã được chuyển thành công.`,
+          `💎 Số tiền: ${formatNumber(withdrawal.amount)} VNDC đã được rút thành công.`,
           { parse_mode: 'Markdown' }
         );
       } else {
@@ -3244,8 +3252,8 @@ async function handleWithdrawalAmountInput(msg, account) {
   await account.save();
 
   const confirmationMessage = getConfirmationMessage(account, amount);
-  await bot.editMessageText(
-    confirmationMessage.text,
+  await bot.editMessageCaption(
+    confirmationMessage.caption,
     {
       chat_id: msg.chat.id,
       message_id: account.userState.lastMessageId,
