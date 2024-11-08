@@ -23,6 +23,11 @@ const accountSchema = new mongoose.Schema({
   vndc: { type: Number, default: 1000000 },
   vnd: { type: Number, default: 1000000000 },
 
+  //hoạt động
+  lastActive: { type: Date, default: Date.now },
+  referralCount: { type: Number, default: 0 },
+  createdAt: { type: Date, default: Date.now },
+
   // Mining related
   miningRate: { type: Number, default: 5 }, // VNDC/hour
   lastMiningUpdate: { type: Date, default: Date.now },
@@ -4786,14 +4791,6 @@ function formatDate(date) {
 
   return `${day}/${month}/${year} ${hour}:${minute}`;
 }
-
-// Cập nhật Schema Account để thêm các trường mới
-const accountSchema = new mongoose.Schema({
-  // ... các trường hiện có ...
-  lastActive: { type: Date, default: Date.now },
-  referralCount: { type: Number, default: 0 },
-  createdAt: { type: Date, default: Date.now }
-});
 
 // Middleware để tự động cập nhật thời gian hoạt động
 accountSchema.pre('save', function(next) {
