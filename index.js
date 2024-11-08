@@ -4905,6 +4905,11 @@ function formatNumber(number) {
   return number?.toLocaleString('en-US', {maximumFractionDigits: 0}) || '0';
 }
 
+
+
+
+
+
 // Command to show rankings
 bot.onText(/\/Bảng xếp hạng/, async (msg) => {
   try {
@@ -4934,11 +4939,35 @@ bot.onText(/\/Bảng xếp hạng/, async (msg) => {
 bot.on('callback_query', async (callbackQuery) => {
   try {
     const data = callbackQuery.data;
+    
+    if (data === 'rankings') {
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: '🏆 Xếp hạng Vàng', callback_data: 'rank_gold_1' },
+            { text: '💎 Xếp hạng VNDC', callback_data: 'rank_vndc_1' }
+          ],
+          [
+            { text: '💵 Xếp hạng VNĐ', callback_data: 'rank_vnd_1' }
+          ]
+        ]
+      };
+
+      await bot.editMessageText('📊 *BẢNG XẾP HẠNG*\nChọn loại xếp hạng bạn muốn xem:', {
+        chat_id: callbackQuery.message.chat.id,
+        message_id: callbackQuery.message.message_id,
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+      return;
+    }
+
     if (data.startsWith('rank_')) {
       const [, type, page] = data.split('_');
       await showRanking(callbackQuery.message.chat.id, type, parseInt(page), callbackQuery.from.id);
       await bot.deleteMessage(callbackQuery.message.chat.id, callbackQuery.message.message_id);
     }
+    
     await bot.answerCallbackQuery(callbackQuery.id);
   } catch (error) {
     console.error('Error in ranking callback:', error);
@@ -4969,7 +4998,7 @@ async function showRanking(chatId, type, page, userId) {
     case 'vnd':
       sortField = 'vnd';
       title = '💵 BẢNG XẾP HẠNG VNĐ';
-      rankingImage = 'https://iili.io/2IRSVAx.pngg';
+      rankingImage = 'https://iili.io/2IRSVAx.png';
       break;
   }
 
@@ -4986,7 +5015,7 @@ async function showRanking(chatId, type, page, userId) {
   // Get user's rank and data
   const userData = await Account.findOne({ userId });
   const userRank = await Account.countDocuments({
-    [sortField]: { $gt: userData.get(sortField) }
+    [sortField]: { $gt: userData?.get(sortField) || 0 }
   }) + 1;
 
   // Generate ranking message
@@ -5008,9 +5037,9 @@ async function showRanking(chatId, type, page, userId) {
   // Add user's rank and stats at the bottom
   message += `━━━━━━━━━━━━━━━━━━━━\n`;
   message += `🎯 Hạng của bạn: #${userRank}\n`;
-  message += `├ Vàng: ${formatNumber(userData.gold)} 🏆\n`;
-  message += `├ VNDC: ${formatNumber(userData.vndc)} 💎\n`;
-  message += `└ VNĐ: ${formatNumber(userData.vnd)} 💵\n`;
+  message += `├ Vàng: ${formatNumber(userData?.gold)} 🏆\n`;
+  message += `├ VNDC: ${formatNumber(userData?.vndc)} 💎\n`;
+  message += `└ VNĐ: ${formatNumber(userData?.vnd)} 💵\n`;
 
   // Create navigation keyboard
   const keyboard = [];
@@ -5038,51 +5067,7 @@ async function showRanking(chatId, type, page, userId) {
   });
 }
 
-// Handle ranking callback queries
-bot.on('callback_query', async (callbackQuery) => {
-  try {
-    const data = callbackQuery.data;
-    
-    // Handle rankings button click
-    if (data === 'rankings') {
-      const keyboard = {
-        inline_keyboard: [
-          [
-            { text: '🏆 Xếp hạng Vàng', callback_data: 'rank_gold_1' },
-            { text: '💎 Xếp hạng VNDC', callback_data: 'rank_vndc_1' }
-          ],
-          [
-            { text: '💵 Xếp hạng VNĐ', callback_data: 'rank_vnd_1' }
-          ]
-        ]
-      };
-
-      await bot.editMessageText('📊 *BẢNG XẾP HẠNG*\nChọn loại xếp hạng bạn muốn xem:', {
-        chat_id: callbackQuery.message.chat.id,
-        message_id: callbackQuery.message.message_id,
-        parse_mode: 'Markdown',
-        reply_markup: keyboard
-      });
-      return;
-    }
-
-    // Handle ranking type selection
-    if (data.startsWith('rank_')) {
-      const [, type, page] = data.split('_');
-      await showRanking(callbackQuery.message.chat.id, type, parseInt(page), callbackQuery.from.id);
-      await bot.deleteMessage(callbackQuery.message.chat.id, callbackQuery.message.message_id);
-    }
-    
-    await bot.answerCallbackQuery(callbackQuery.id);
-  } catch (error) {
-    console.error('Error in ranking callback:', error);
-    bot.answerCallbackQuery(callbackQuery.id, {
-      text: '❌ Có lỗi xảy ra, vui lòng thử lại sau.',
-      show_alert: true
-    });
-  }
-});
-
 function formatNumber(number) {
   return number?.toLocaleString('en-US', {maximumFractionDigits: 0}) || '0';
 }
+
