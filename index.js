@@ -1936,7 +1936,7 @@ async function sendMiningStatus(chatId, account, messageId = null) {
   
 
 
-  account.miningRate = currentMiningRate;
+
 
   const miningMessage = `
 ⛏ *KHAI THÁC VNDC*
