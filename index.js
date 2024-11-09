@@ -1694,8 +1694,8 @@ bot.onText(/Xem tài khoản|\/profile/, async (msg) => {
 └ 📚 EXP: ${expProgressBar} ${((expProgress/expNeeded) * 100).toFixed(1)}%
 └ 👑 VIP ${account.vipLevel}: ${vipProgressBar}
 
-🎮 *Hoạt Động:*
-└ 🎫 Quay: ${account.spinCount} | 🎁 Quà: ${account.giftBoxCount}
+🎮 *Tài sản khác:*
+└ 🎫 LƯợt Quay: ${account.spinCount} | 🎁 Hộp Quà: ${account.giftBoxCount}
 └ 📅 Đăng nhập: ${account.consecutiveLogins} ngày`;
 
     const inlineKeyboard = {
@@ -1751,7 +1751,7 @@ bot.onText(/Xem tài khoản|\/profile/, async (msg) => {
           clearInterval(updateInterval);
         }
       }
-    }, 5000);
+    }, 10000);
 
     // Dừng cập nhật sau 1 phút
     setTimeout(() => clearInterval(updateInterval), 60000);
@@ -1928,6 +1928,11 @@ async function sendMiningStatus(chatId, account, messageId = null) {
   const nextLevelCost = Math.ceil(baseUpgradeCost * Math.pow(levelMultiplier, currentLevel - 1));
   const currentMiningRate = baseMiningRate * Math.pow(1.2, currentLevel - 1);
   const nextLevelRate = currentMiningRate * 1.2;
+  const upgradeCost = subLevelUpgradeCosts[account.level][account.subLevel];
+  const nextRank = getRankInfo(nextLevel, nextSubLevel);
+  const newMiningRate = miningRateIncrease[account.level][account.subLevel];
+  
+
 
   account.miningRate = currentMiningRate;
 
@@ -1939,12 +1944,12 @@ async function sendMiningStatus(chatId, account, messageId = null) {
 ⚡️ *Trạng thái:* ${account.isMining ? '🟢 Đang đào' : '🔴 Đang Dừng'}
 └ ⏳ ${formatTimeRemaining(account.miningEndTime)}
 └ ${progressBar} ${Math.max(0, (miningProgress * 100)).toFixed(1)}%
-└ 📈 Tốc độ: ${currentMiningRate.toFixed(2)} VNDC/h
+└ 📈 Tốc độ đào VNDC: ${account.miningRate.toFixed(1)} VNDC/h
 
 🏝 *Đảo cấp độ tiếp theo:*
-└ 📊 Cấp độ: ${currentLevel}
-└ 🔄 Phí nâng cấp: ${formatNumber(nextLevelCost)} VNDC
-└ ⚡️ Tốc độ mới: +${nextLevelRate.toFixed(2)} VNDC/h
+└ ⭐️ *Cấp độ tiếp theo:* ${nextRank}
+└ 💫 *Chi phí nâng cấp:* ${upgradeCost.toLocaleString()} vàng
+└ ⚡️ Tốc độ mới: +${newMiningRate.toFixed(2)} VNDC/h
 
 💡 *Mẹo tăng tốc độ đào vndc:*
 • Nâng cấp đảo để tăng tốc độ đào
@@ -2295,6 +2300,8 @@ async function showMainMenu(chatId, userId) {
     if (!account) {
       return bot.sendMessage(chatId, '❌ Không tìm thấy tài khoản, vui lòng /start để tạo tài khoản mới.');
     }
+
+
 
     // Thoát ký tự đặc biệt cho các trường có thể chứa ký tự đặc biệt
     const username = escapeMarkdown(account.username || 'Không có tên');
