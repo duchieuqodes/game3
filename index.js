@@ -1929,6 +1929,8 @@ async function sendMiningStatus(chatId, account, messageId = null) {
   const currentMiningRate = baseMiningRate * Math.pow(1.2, currentLevel - 1);
   const nextLevelRate = currentMiningRate * 1.2;
   const upgradeCost = subLevelUpgradeCosts[account.level][account.subLevel];
+  const nextSubLevel = (account.subLevel + 1) % 4;
+  const nextLevel = nextSubLevel === 0 ? account.level + 1 : account.level;
   const nextRank = getRankInfo(nextLevel, nextSubLevel);
   const newMiningRate = miningRateIncrease[account.level][account.subLevel];
   
