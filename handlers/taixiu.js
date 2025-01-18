@@ -36,7 +36,7 @@ module.exports = (bot) => {
 
         // Đảm bảo save thành công
         await player.save();
-        console.log('TaiXiu được khởi tạo:', player.taiXiu);
+    
       }
     } catch (error) {
       console.error('Lỗi khởi tạo TaiXiu:', error);
