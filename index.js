@@ -1,5 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const connectDB = require('./config/database');
+const keep_alive = require('./keep_alive.js');
 
 // Connect to MongoDB
 connectDB();
